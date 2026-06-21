@@ -31,9 +31,12 @@ pub struct ApprovalResponse {
     pub status: String,
     pub requested_by: Uuid,
     pub reviewed_by: Option<Uuid>,
+    #[serde(with = "crate::dto::option_datetime_format")]
     pub reviewed_at: Option<time::OffsetDateTime>,
     pub comment: Option<String>,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
+    #[serde(with = "crate::dto::datetime_format")]
     pub updated_at: time::OffsetDateTime,
 }
 

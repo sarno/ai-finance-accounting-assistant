@@ -44,6 +44,7 @@ pub struct CompanyResponse {
     pub address: Option<String>,
     pub currency: String,
     pub is_active: bool,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
 
@@ -92,6 +93,7 @@ pub struct AccountResponse {
     pub account_type: String,
     pub parent_id: Option<Uuid>,
     pub is_active: bool,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
 
@@ -151,6 +153,7 @@ pub struct CustomerResponse {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub is_active: bool,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
 
@@ -204,6 +207,7 @@ pub struct SupplierResponse {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub is_active: bool,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
 
@@ -257,6 +261,7 @@ pub struct BankAccountResponse {
     pub account_name: String,
     pub currency: String,
     pub is_active: bool,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
 
@@ -321,6 +326,7 @@ pub struct TaxTypeResponse {
     #[serde(with = "crate::dto::option_date_format")]
     pub effective_to: Option<time::Date>,
     pub is_active: bool,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
 
@@ -381,6 +387,7 @@ pub struct BranchResponse {
     pub address: Option<String>,
     pub phone: Option<String>,
     pub is_active: bool,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
 

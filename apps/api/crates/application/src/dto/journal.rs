@@ -44,6 +44,7 @@ pub struct JournalResponse {
     pub status: DocumentStatus,
     pub source: JournalSource,
     pub created_by: Uuid,
+    #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
  
