@@ -1,9 +1,8 @@
+pub mod approvals;
 pub mod auth;
 pub mod health;
-pub mod journals;
-pub mod reports;
-pub mod master_data;
-pub mod approvals;
 pub mod invoices;
 pub mod items;
-
+pub mod journals;
+pub mod master_data;
+pub mod reports;

@@ -4,16 +4,16 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
+use std::time::Duration;
 use tower_http::{
     cors::{Any, CorsLayer},
     request_id::{MakeRequestUuid, SetRequestIdLayer},
     timeout::TimeoutLayer,
     trace::TraceLayer,
 };
-use std::time::Duration;
 
 use crate::{
-    handlers::{auth, health, journals, reports, master_data, approvals, invoices, items},
+    handlers::{approvals, auth, health, invoices, items, journals, master_data, reports},
     middleware::auth_middleware,
     state::AppState,
 };
@@ -24,70 +24,146 @@ pub fn build(state: AppState) -> Router {
 
     // ─── Public routes (no auth required) ────────────────────────────────────
     let public_routes = Router::new()
-        .route("/health",    get(health::health_check))
+        .route("/health", get(health::health_check))
         .route("/health/db", get(health::db_health))
-        .route("/api/auth/login",   post(auth::login))
+        .route("/api/auth/login", post(auth::login))
         .route("/api/auth/refresh", post(auth::refresh_token));
 
     // ─── Protected routes (JWT required) ─────────────────────────────────────
     let protected_routes = Router::new()
         // Approvals
-        .route("/api/approvals",             get(approvals::list_pending_approvals))
-        .route("/api/approvals/:id",         get(approvals::get_approval))
-        .route("/api/approvals/:id/approve", post(approvals::approve_request))
-        .route("/api/approvals/:id/reject",  post(approvals::reject_request))
+        .route("/api/approvals", get(approvals::list_pending_approvals))
+        .route("/api/approvals/:id", get(approvals::get_approval))
+        .route(
+            "/api/approvals/:id/approve",
+            post(approvals::approve_request),
+        )
+        .route("/api/approvals/:id/reject", post(approvals::reject_request))
         // Journals
-        .route("/api/journals",              get(journals::list_journals))
-        .route("/api/journals/draft",        post(journals::create_draft))
-        .route("/api/journals/:id",          get(journals::get_journal).put(journals::update_journal).delete(journals::delete_journal))
-        .route("/api/journals/:id/submit",   post(journals::submit_approval))
-        .route("/api/journals/:id/post",     post(journals::post_journal))
-        .route("/api/journals/:id/approve",  post(journals::approve_journal))
+        .route("/api/journals", get(journals::list_journals))
+        .route("/api/journals/draft", post(journals::create_draft))
+        .route(
+            "/api/journals/:id",
+            get(journals::get_journal)
+                .put(journals::update_journal)
+                .delete(journals::delete_journal),
+        )
+        .route("/api/journals/:id/submit", post(journals::submit_approval))
+        .route("/api/journals/:id/post", post(journals::post_journal))
+        .route("/api/journals/:id/approve", post(journals::approve_journal))
         // Sales Invoices
-        .route("/api/sales-invoices",              get(invoices::list_sales_invoices))
-        .route("/api/sales-invoices/draft",        post(invoices::create_sales_draft))
-        .route("/api/sales-invoices/:id",          get(invoices::get_sales_invoice).put(invoices::update_sales_invoice).delete(invoices::delete_sales_invoice))
-        .route("/api/sales-invoices/:id/submit",   post(invoices::submit_approval))
+        .route("/api/sales-invoices", get(invoices::list_sales_invoices))
+        .route(
+            "/api/sales-invoices/draft",
+            post(invoices::create_sales_draft),
+        )
+        .route(
+            "/api/sales-invoices/:id",
+            get(invoices::get_sales_invoice)
+                .put(invoices::update_sales_invoice)
+                .delete(invoices::delete_sales_invoice),
+        )
+        .route(
+            "/api/sales-invoices/:id/submit",
+            post(invoices::submit_approval),
+        )
         // Reports
-        .route("/api/reports/cash-position",    get(reports::cash_position))
-        .route("/api/reports/profit-loss",      get(reports::profit_loss))
+        .route("/api/reports/cash-position", get(reports::cash_position))
+        .route("/api/reports/profit-loss", get(reports::profit_loss))
         // Companies
-        .route("/api/companies",             post(master_data::create_company).get(master_data::list_companies))
-        .route("/api/companies/:id",         get(master_data::get_company).put(master_data::update_company))
+        .route(
+            "/api/companies",
+            post(master_data::create_company).get(master_data::list_companies),
+        )
+        .route(
+            "/api/companies/:id",
+            get(master_data::get_company).put(master_data::update_company),
+        )
         // Accounts (COA)
-        .route("/api/accounts",              post(master_data::create_account))
-        .route("/api/accounts/:id",          get(master_data::get_account).put(master_data::update_account))
-        .route("/api/companies/:company_id/accounts", get(master_data::list_accounts))
+        .route("/api/accounts", post(master_data::create_account))
+        .route(
+            "/api/accounts/:id",
+            get(master_data::get_account).put(master_data::update_account),
+        )
+        .route(
+            "/api/companies/:company_id/accounts",
+            get(master_data::list_accounts),
+        )
         // Customers
-        .route("/api/customers",             post(master_data::create_customer))
-        .route("/api/customers/:id",         get(master_data::get_customer).put(master_data::update_customer))
-        .route("/api/companies/:company_id/customers", get(master_data::list_customers))
+        .route("/api/customers", post(master_data::create_customer))
+        .route(
+            "/api/customers/:id",
+            get(master_data::get_customer).put(master_data::update_customer),
+        )
+        .route(
+            "/api/companies/:company_id/customers",
+            get(master_data::list_customers),
+        )
         // Suppliers
-        .route("/api/suppliers",             post(master_data::create_supplier))
-        .route("/api/suppliers/:id",         get(master_data::get_supplier).put(master_data::update_supplier))
-        .route("/api/companies/:company_id/suppliers", get(master_data::list_suppliers))
+        .route("/api/suppliers", post(master_data::create_supplier))
+        .route(
+            "/api/suppliers/:id",
+            get(master_data::get_supplier).put(master_data::update_supplier),
+        )
+        .route(
+            "/api/companies/:company_id/suppliers",
+            get(master_data::list_suppliers),
+        )
         // Bank Accounts
-        .route("/api/bank-accounts",         post(master_data::create_bank_account))
-        .route("/api/bank-accounts/:id",     get(master_data::get_bank_account).put(master_data::update_bank_account))
-        .route("/api/companies/:company_id/bank-accounts", get(master_data::list_bank_accounts))
+        .route("/api/bank-accounts", post(master_data::create_bank_account))
+        .route(
+            "/api/bank-accounts/:id",
+            get(master_data::get_bank_account).put(master_data::update_bank_account),
+        )
+        .route(
+            "/api/companies/:company_id/bank-accounts",
+            get(master_data::list_bank_accounts),
+        )
         // Tax Types
-        .route("/api/tax-types",             post(master_data::create_tax_type))
-        .route("/api/tax-types/:id",         get(master_data::get_tax_type).put(master_data::update_tax_type))
-        .route("/api/companies/:company_id/tax-types", get(master_data::list_tax_types))
+        .route("/api/tax-types", post(master_data::create_tax_type))
+        .route(
+            "/api/tax-types/:id",
+            get(master_data::get_tax_type).put(master_data::update_tax_type),
+        )
+        .route(
+            "/api/companies/:company_id/tax-types",
+            get(master_data::list_tax_types),
+        )
         // Branches
-        .route("/api/branches",             post(master_data::create_branch))
-        .route("/api/branches/:id",         get(master_data::get_branch).put(master_data::update_branch))
-        .route("/api/companies/:company_id/branches", get(master_data::list_branches))
+        .route("/api/branches", post(master_data::create_branch))
+        .route(
+            "/api/branches/:id",
+            get(master_data::get_branch).put(master_data::update_branch),
+        )
+        .route(
+            "/api/companies/:company_id/branches",
+            get(master_data::list_branches),
+        )
         // Item Categories
-        .route("/api/item-categories",       post(items::create_category))
-        .route("/api/item-categories/:id",   get(items::get_category).put(items::update_category).delete(items::delete_category))
-        .route("/api/companies/:company_id/item-categories", get(items::list_categories))
+        .route("/api/item-categories", post(items::create_category))
+        .route(
+            "/api/item-categories/:id",
+            get(items::get_category)
+                .put(items::update_category)
+                .delete(items::delete_category),
+        )
+        .route(
+            "/api/companies/:company_id/item-categories",
+            get(items::list_categories),
+        )
         // Items
-        .route("/api/items",                 post(items::create_item))
-        .route("/api/items/:id",             get(items::get_item).put(items::update_item).delete(items::delete_item))
+        .route("/api/items", post(items::create_item))
+        .route(
+            "/api/items/:id",
+            get(items::get_item)
+                .put(items::update_item)
+                .delete(items::delete_item),
+        )
         .route("/api/companies/:company_id/items", get(items::list_items))
-        .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware::require_auth));
-
+        .layer(middleware::from_fn_with_state(
+            shared_state.clone(),
+            auth_middleware::require_auth,
+        ));
 
     // ─── Global middleware stack ──────────────────────────────────────────────
     public_routes

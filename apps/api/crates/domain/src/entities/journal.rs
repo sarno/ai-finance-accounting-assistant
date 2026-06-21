@@ -1,11 +1,8 @@
+use crate::{errors::DomainError, value_objects::DocumentStatus};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
-use crate::{
-    errors::DomainError,
-    value_objects::DocumentStatus,
-};
 
 /// A journal entry (set of balanced debit/credit lines).
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -20,6 +20,7 @@ export interface SalesInvoice {
 
 export interface InvoiceLine {
   id: string
+  itemId?: string
   description: string
   quantity: number
   unitPrice: number
@@ -44,6 +45,7 @@ export interface CreateSalesInvoiceRequest {
 }
 
 export interface CreateInvoiceLineRequest {
+  itemId?: string
   description: string
   quantity: number
   unitPrice: number

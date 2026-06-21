@@ -27,7 +27,10 @@ impl From<anyhow::Error> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, error_code, message) = match &self.0 {
-            AppError::Domain(DomainError::JournalNotBalanced { total_debit, total_credit }) => (
+            AppError::Domain(DomainError::JournalNotBalanced {
+                total_debit,
+                total_credit,
+            }) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "JOURNAL_NOT_BALANCED",
                 format!("Total debit ({total_debit}) must equal credit ({total_credit})"),
@@ -57,26 +60,14 @@ impl IntoResponse for ApiError {
                 "NOT_FOUND",
                 format!("{resource} not found: {id}"),
             ),
-            AppError::Unauthorized { reason } => (
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                reason.clone(),
-            ),
-            AppError::Forbidden { action } => (
-                StatusCode::FORBIDDEN,
-                "FORBIDDEN",
-                action.clone(),
-            ),
-            AppError::Conflict { message } => (
-                StatusCode::CONFLICT,
-                "CONFLICT",
-                message.clone(),
-            ),
-            AppError::Validation { message } => (
-                StatusCode::BAD_REQUEST,
-                "VALIDATION_ERROR",
-                message.clone(),
-            ),
+            AppError::Unauthorized { reason } => {
+                (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", reason.clone())
+            }
+            AppError::Forbidden { action } => (StatusCode::FORBIDDEN, "FORBIDDEN", action.clone()),
+            AppError::Conflict { message } => (StatusCode::CONFLICT, "CONFLICT", message.clone()),
+            AppError::Validation { message } => {
+                (StatusCode::BAD_REQUEST, "VALIDATION_ERROR", message.clone())
+            }
             AppError::Internal(e) => {
                 tracing::error!("Internal error: {:?}", e);
                 (
@@ -95,6 +86,10 @@ impl IntoResponse for ApiError {
             }
         };
 
-        (status, Json(json!({ "errorCode": error_code, "message": message }))).into_response()
+        (
+            status,
+            Json(json!({ "errorCode": error_code, "message": message })),
+        )
+            .into_response()
     }
 }

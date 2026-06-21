@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, Query, State},
-    response::{Json, IntoResponse},
     http::HeaderMap,
+    response::{IntoResponse, Json},
 };
 use std::sync::Arc;
 use uuid::Uuid;
 
-use finance_assistant_app::dto::journal::{CreateJournalDraftRequest, JournalResponse};
 use crate::{errors::*, middleware::auth_middleware::AuthenticatedUser, state::AppState};
+use finance_assistant_app::dto::journal::{CreateJournalDraftRequest, JournalResponse};
 
 #[derive(serde::Deserialize)]
 pub struct ListJournalsParams {
@@ -24,13 +24,13 @@ pub async fn create_draft(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<JournalResponse>, ApiError> {
     println!("Create draft raw JSON: {}", body);
-    let req: CreateJournalDraftRequest = serde_json::from_value(body)
-        .map_err(|e| ApiError(finance_assistant_app::errors::AppError::Validation { message: format!("JSON parse error: {}", e) }))?;
+    let req: CreateJournalDraftRequest = serde_json::from_value(body).map_err(|e| {
+        ApiError(finance_assistant_app::errors::AppError::Validation {
+            message: format!("JSON parse error: {}", e),
+        })
+    })?;
     println!("Create draft parsed struct: {:?}", req);
-    let response = state
-        .journal_service
-        .create_draft(req, user.id)
-        .await?;
+    let response = state.journal_service.create_draft(req, user.id).await?;
 
     Ok(Json(response))
 }
@@ -65,7 +65,10 @@ pub async fn list_journals(
 
     let mut headers = HeaderMap::new();
     headers.insert("x-total-count", total.to_string().parse().unwrap());
-    headers.insert("access-control-expose-headers", "x-total-count".parse().unwrap());
+    headers.insert(
+        "access-control-expose-headers",
+        "x-total-count".parse().unwrap(),
+    );
 
     Ok((headers, Json(response)))
 }
@@ -76,7 +79,10 @@ pub async fn submit_approval(
     AuthenticatedUser(user): AuthenticatedUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<JournalResponse>, ApiError> {
-    state.approval_service.submit_journal_approval(id, user.id).await?;
+    state
+        .approval_service
+        .submit_journal_approval(id, user.id)
+        .await?;
     let response = state.journal_service.get_journal(id).await?;
     Ok(Json(response))
 }
@@ -109,12 +115,12 @@ pub async fn update_journal(
     Path(id): Path<Uuid>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<JournalResponse>, ApiError> {
-    let req: CreateJournalDraftRequest = serde_json::from_value(body)
-        .map_err(|e| ApiError(finance_assistant_app::errors::AppError::Validation { message: format!("JSON parse error: {}", e) }))?;
-    let response = state
-        .journal_service
-        .update_draft(id, req)
-        .await?;
+    let req: CreateJournalDraftRequest = serde_json::from_value(body).map_err(|e| {
+        ApiError(finance_assistant_app::errors::AppError::Validation {
+            message: format!("JSON parse error: {}", e),
+        })
+    })?;
+    let response = state.journal_service.update_draft(id, req).await?;
     Ok(Json(response))
 }
 

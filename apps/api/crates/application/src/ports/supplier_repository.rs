@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use finance_assistant_domain::entities::supplier::Supplier;
 use crate::errors::AppError;
+use finance_assistant_domain::entities::supplier::Supplier;
 
 #[async_trait]
 pub trait SupplierRepository: Send + Sync {

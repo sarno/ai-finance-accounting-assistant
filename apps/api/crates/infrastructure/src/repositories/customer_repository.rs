@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::customer_repository::CustomerRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::customer_repository::CustomerRepository};
 use finance_assistant_domain::entities::customer::Customer;
 
 pub struct PgCustomerRepository {
@@ -35,10 +32,12 @@ impl CustomerRepository for PgCustomerRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "Customer".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "Customer".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         Ok(Customer {

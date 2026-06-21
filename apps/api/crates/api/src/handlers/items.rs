@@ -5,12 +5,8 @@ use axum::{
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::{errors::ApiError, middleware::auth_middleware::AuthenticatedUser, state::AppState};
 use finance_assistant_app::dto::item::*;
-use crate::{
-    errors::ApiError,
-    middleware::auth_middleware::AuthenticatedUser,
-    state::AppState,
-};
 
 // ─── Item Categories ─────────────────────────────────────────────────────────
 

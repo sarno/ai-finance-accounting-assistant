@@ -192,34 +192,20 @@
                 <label class="form-label">Invoice Number *</label>
                 <input v-model="form.invoiceNumber" type="text" class="form-input" placeholder="INV/2026/001" required />
               </div>
-              <div class="form-group custom-select-search-container" ref="customerDropdownRef">
+              <div class="form-group">
                 <label class="form-label">Customer *</label>
-                <div class="custom-select-search-wrapper">
-                  <input
-                    type="text"
-                    class="form-input"
-                    placeholder="Search and select customer..."
-                    v-model="customerSearchTerm"
-                    @focus="isCustomerDropdownOpen = true"
-                    required
-                  />
-                  <span class="custom-select-arrow" @click="toggleCustomerDropdown">▼</span>
-
-                  <div v-show="isCustomerDropdownOpen" class="custom-select-dropdown">
-                    <div
-                      v-for="c in filteredFormCustomers"
-                      :key="c.id"
-                      class="custom-select-option"
-                      @click="selectFormCustomer(c)"
-                    >
-                      {{ c.name }}
-                    </div>
-                    <div v-if="filteredFormCustomers.length === 0" class="custom-select-no-results">
-                      No customers found
-                    </div>
-                  </div>
-                </div>
-                <input type="hidden" :value="form.customerId" required name="customerId" />
+                <SearchableDropdown
+                  v-model="form.customerId"
+                  :options="customers"
+                  placeholder="Search and select customer..."
+                  no-results-text="No customers found"
+                  :required="true"
+                  container-class="custom-select-search-container"
+                  :get-option-key="(customer) => customer.id"
+                  :get-option-label="(customer) => customer.name"
+                  :get-option-search-text="(customer) => customer.name"
+                  @select="handleCustomerSelect"
+                />
               </div>
             </div>
 
@@ -246,32 +232,47 @@
                 <button type="button" class="btn btn-secondary btn-sm" @click="addLine">+ Add Item Line</button>
               </div>
 
-              <div class="table-container" style="overflow: visible !important;">
-                <table>
+              <div class="table-container invoice-lines-table-container" style="overflow: visible !important;">
+                <table class="invoice-lines-table">
                   <thead>
                     <tr>
-                      <th style="width: 30%;">Item Description *</th>
+                      <th style="width: 18%;">Item *</th>
+                      <th style="width: 24%;">Item Description *</th>
                       <th style="width: 10%; text-align: right;">Quantity *</th>
-                      <th style="width: 15%; text-align: right;">Unit Price *</th>
+                      <th style="width: 14%; text-align: right;">Unit Price *</th>
                       <th style="width: 10%; text-align: right;">Discount</th>
-                      <th style="width: 15%;">Tax Rate</th>
-                      <th style="width: 15%;">Revenue Account *</th>
+                      <th style="width: 10%;">Tax Rate</th>
+                      <th style="width: 16%;">Revenue Account *</th>
                       <th style="width: 5%;"></th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="(line, index) in form.lines" :key="index">
                       <td>
+                        <SearchableDropdown
+                          v-model="line.itemId"
+                          :options="items"
+                          placeholder="Search and select item..."
+                          no-results-text="No items found"
+                          size="sm"
+                          container-class="custom-select-search-container"
+                          :get-option-key="(item) => item.id"
+                          :get-option-label="(item) => `${item.code} - ${item.name}`"
+                          :get-option-search-text="(item) => `${item.code} ${item.name} ${item.description || ''}`"
+                          @select="selectLineItem(line, $event)"
+                        />
+                      </td>
+                      <td>
                         <input v-model="line.description" type="text" class="form-input form-input-sm" placeholder="Description of goods/services" required />
                       </td>
-                      <td>
-                        <input v-model.number="line.quantity" type="number" step="any" min="0.0001" class="form-input form-input-sm" style="text-align: right;" required />
+                      <td class="numeric-cell">
+                        <input v-model.number="line.quantity" type="number" step="any" min="0.0001" class="form-input form-input-sm numeric-input" required />
                       </td>
-                      <td>
-                        <input v-model.number="line.unitPrice" type="number" step="any" min="0" class="form-input form-input-sm" style="text-align: right;" required />
+                      <td class="numeric-cell">
+                        <input v-model.number="line.unitPrice" type="number" step="any" min="0" class="form-input form-input-sm numeric-input" required />
                       </td>
-                      <td>
-                        <input v-model.number="line.discountAmount" type="number" step="any" min="0" class="form-input form-input-sm" style="text-align: right;" />
+                      <td class="numeric-cell">
+                        <input v-model.number="line.discountAmount" type="number" step="any" min="0" class="form-input form-input-sm numeric-input" />
                       </td>
                       <td>
                         <select v-model="line.taxTypeId" class="form-select form-select-sm">
@@ -281,7 +282,7 @@
                           </option>
                         </select>
                       </td>
-                      <td>
+                      <td class="revenue-account-cell">
                         <select v-model="line.accountId" class="form-select form-select-sm" required>
                           <option value="">Select Account</option>
                           <option v-for="a in revenueAccounts" :key="a.id" :value="a.id">
@@ -293,8 +294,8 @@
                         <button type="button" class="btn-delete-row" @click="removeLine(index)">&times;</button>
                       </td>
                     </tr>
-                    <tr v-if="form.lines.length === 0">
-                      <td colspan="7" class="empty-state" style="padding: 16px;">
+                  <tr v-if="form.lines.length === 0">
+                      <td colspan="8" class="empty-state" style="padding: 16px;">
                         No lines added. Click "+ Add Item Line" to add invoice items.
                       </td>
                     </tr>
@@ -387,6 +388,7 @@
               <table>
                 <thead>
                   <tr>
+                    <th>Item</th>
                     <th>Item Description</th>
                     <th>Account</th>
                     <th style="text-align: right;">Quantity</th>
@@ -399,6 +401,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="line in selectedInvoice.lines" :key="line.id">
+                    <td>{{ getItemLabel(line.itemId) || line.description }}</td>
                     <td>{{ line.description }}</td>
                     <td>{{ getAccountName(line.accountId) }}</td>
                     <td style="text-align: right;">{{ line.quantity }}</td>
@@ -458,9 +461,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import MainLayout from '@/components/MainLayout.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import SearchableDropdown from '@/components/SearchableDropdown.vue'
 import { useInvoiceStore } from '@/stores/invoice.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { customerApi, taxTypeApi, branchApi, accountApi, itemApi } from '@/api/master-data.api'
@@ -489,30 +493,6 @@ const selectedInvoice = ref<SalesInvoice | null>(null)
 // Search, filtering, and paging
 const searchTerm = ref('')
 const selectedStatus = ref('')
-
-// Custom Select Search for Customer
-const isCustomerDropdownOpen = ref(false)
-const customerSearchTerm = ref('')
-const customerDropdownRef = ref<HTMLElement | null>(null)
-
-const filteredFormCustomers = computed(() => {
-  if (!customerSearchTerm.value) {
-    return customers.value
-  }
-  const q = customerSearchTerm.value.toLowerCase()
-  return customers.value.filter(c => c.name.toLowerCase().includes(q))
-})
-
-function selectFormCustomer(c: Customer) {
-  form.value.customerId = c.id
-  customerSearchTerm.value = c.name
-  isCustomerDropdownOpen.value = false
-}
-
-function toggleCustomerDropdown(event: Event) {
-  event.stopPropagation()
-  isCustomerDropdownOpen.value = !isCustomerDropdownOpen.value
-}
 const selectedBranch = ref('')
 const currentPage = ref(1)
 const perPage = ref(5)
@@ -531,6 +511,7 @@ const form = ref({
   dueDate: new Date().toISOString().substring(0, 10),
   notes: '',
   lines: [] as Array<{
+    itemId: string
     description: string
     quantity: number
     unitPrice: number
@@ -546,27 +527,17 @@ const targetDeleteId = ref<string | null>(null)
 
 // Watch document click to close row actions dropdowns
 onMounted(async () => {
-  window.addEventListener('click', closeDropdowns)
+  window.addEventListener('click', closeRowActions)
   await loadMasterData()
   await fetchInvoices()
 })
 
-function closeDropdowns(event: MouseEvent) {
+onBeforeUnmount(() => {
+  window.removeEventListener('click', closeRowActions)
+})
+
+function closeRowActions() {
   activeDropdownId.value = null
-  
-  if (customerDropdownRef.value && !customerDropdownRef.value.contains(event.target as Node)) {
-    isCustomerDropdownOpen.value = false
-    
-    // Restore search term based on current selection
-    if (form.value.customerId) {
-      const selected = customers.value.find(c => c.id === form.value.customerId)
-      if (selected) {
-        customerSearchTerm.value = selected.name
-      }
-    } else {
-      customerSearchTerm.value = ''
-    }
-  }
 }
 
 async function loadMasterData() {
@@ -605,6 +576,7 @@ async function fetchInvoices() {
 const customerMap = computed(() => new Map<string, Customer>(customers.value.map(c => [c.id, c])))
 const branchMap = computed(() => new Map<string, Branch>(branches.value.map(b => [b.id, b])))
 const accountMap = computed(() => new Map<string, Account>(accounts.value.map(a => [a.id, a])))
+const itemMap = computed(() => new Map<string, Item>(items.value.map(i => [i.id, i])))
 
 function getCustomerName(id: string): string {
   return customerMap.value.get(id)?.name || id
@@ -618,6 +590,16 @@ function getBranchName(id?: string): string {
 function getAccountName(id: string): string {
   const acc = accountMap.value.get(id)
   return acc ? `${acc.code} - ${acc.name}` : id
+}
+
+function getItemLabel(id?: string): string {
+  if (!id) return ''
+  const item = itemMap.value.get(id)
+  return item ? `${item.code} - ${item.name}` : id
+}
+
+function handleCustomerSelect(customer: Customer) {
+  form.value.customerId = customer.id
 }
 
 const revenueAccounts = computed(() => {
@@ -695,7 +677,6 @@ function toggleRowDropdown(id: string) {
 function openCreateModal() {
   isEdit.value = false
   targetEditId.value = null
-  customerSearchTerm.value = ''
   form.value = {
     branchId: branches.value[0]?.id || '',
     invoiceNumber: `INV/${new Date().getFullYear()}/${String(invoiceStore.invoices.length + 1).padStart(3, '0')}`,
@@ -712,10 +693,7 @@ function openCreateModal() {
 function openEditModal(invoice: SalesInvoice) {
   isEdit.value = true
   targetEditId.value = invoice.id
-  
-  const customer = customers.value.find(c => c.id === invoice.customerId)
-  customerSearchTerm.value = customer ? customer.name : ''
-  
+
   form.value = {
     branchId: invoice.branchId || '',
     invoiceNumber: invoice.invoiceNumber,
@@ -724,7 +702,7 @@ function openEditModal(invoice: SalesInvoice) {
     dueDate: new Date(invoice.dueDate).toISOString().substring(0, 10),
     notes: invoice.notes || '',
     lines: invoice.lines.map(line => ({
-      itemId: '',
+      itemId: line.itemId || '',
       description: line.description,
       quantity: Number(line.quantity),
       unitPrice: Number(line.unitPrice),
@@ -753,18 +731,24 @@ function addLine() {
   })
 }
 
-function onItemChange(line: any) {
-  if (!line.itemId) return
-  const item = items.value.find(i => i.id === line.itemId)
-  if (item) {
-    line.description = item.name
-    line.unitPrice = Number(item.unitPrice)
-    if (item.taxTypeId) {
-      line.taxTypeId = item.taxTypeId
-    }
-    if (item.saleAccountId) {
-      line.accountId = item.saleAccountId
-    }
+function selectLineItem(
+  line: {
+    itemId: string
+    description: string
+    unitPrice: number
+    taxTypeId: string
+    accountId: string
+  },
+  item: Item
+) {
+  line.itemId = item.id
+  line.description = item.name
+  line.unitPrice = Number(item.unitPrice)
+  if (item.taxTypeId) {
+    line.taxTypeId = item.taxTypeId
+  }
+  if (item.saleAccountId) {
+    line.accountId = item.saleAccountId
   }
 }
 
@@ -810,6 +794,7 @@ async function saveDraft() {
     dueDate: form.value.dueDate,
     notes: form.value.notes || undefined,
     lines: form.value.lines.map((line, idx) => ({
+      itemId: line.itemId || undefined,
       description: line.description,
       quantity: Number(line.quantity),
       unitPrice: Number(line.unitPrice),
@@ -917,7 +902,8 @@ function formatCurrency(val: number): string {
 
 <style scoped>
 .modal-lg-custom {
-  max-width: 960px;
+  max-width: 1180px;
+  width: min(1180px, calc(100vw - 32px));
 }
 
 .form-grid-3 {
@@ -930,6 +916,33 @@ function formatCurrency(val: number): string {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+}
+
+.invoice-lines-table-container {
+  overflow-x: auto;
+}
+
+.invoice-lines-table {
+  min-width: 1200px;
+}
+
+.invoice-lines-table th,
+.invoice-lines-table td {
+  vertical-align: middle;
+}
+
+.numeric-cell {
+  min-width: 130px;
+}
+
+.numeric-input {
+  width: 100%;
+  min-width: 120px;
+  text-align: right;
+}
+
+.revenue-account-cell {
+  min-width: 190px;
 }
 
 .form-input-sm, .form-select-sm {
@@ -1086,64 +1099,4 @@ function formatCurrency(val: number): string {
   gap: 6px;
 }
 
-/* Custom Select Search styles */
-.custom-select-search-container {
-  position: relative;
-}
-
-.custom-select-search-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.custom-select-search-wrapper .form-input {
-  width: 100%;
-  padding-right: 32px;
-}
-
-.custom-select-arrow {
-  position: absolute;
-  right: 12px;
-  font-size: 0.65rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.custom-select-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  width: 100%;
-  max-height: 200px;
-  overflow-y: auto;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  z-index: 1000;
-}
-
-.custom-select-option {
-  padding: 10px 14px;
-  font-size: 0.875rem;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-  text-align: left;
-}
-
-.custom-select-option:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--accent-primary);
-}
-
-.custom-select-no-results {
-  padding: 12px 14px;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  text-align: center;
-}
 </style>

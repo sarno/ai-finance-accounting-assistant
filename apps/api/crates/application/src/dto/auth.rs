@@ -27,8 +27,6 @@ pub struct UserSummary {
     pub roles: Vec<String>,
 }
 
-
-
 // ─── Refresh token ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -42,4 +40,3 @@ pub struct RefreshTokenResponse {
     pub access_token: String,
     pub refresh_token: String,
 }
-

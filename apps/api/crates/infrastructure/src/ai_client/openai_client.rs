@@ -58,7 +58,8 @@ impl AiClientPort for OpenAiClient {
             "temperature": 0.2
         });
 
-        let resp = self.client
+        let resp = self
+            .client
             .post("https://api.openai.com/v1/chat/completions")
             .bearer_auth(&self.api_key)
             .json(&body)

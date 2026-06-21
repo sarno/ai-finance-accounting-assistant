@@ -5,12 +5,8 @@ use axum::{
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::{errors::ApiError, middleware::auth_middleware::AuthenticatedUser, state::AppState};
 use finance_assistant_app::dto::master_data::*;
-use crate::{
-    errors::ApiError,
-    middleware::auth_middleware::AuthenticatedUser,
-    state::AppState,
-};
 
 // ─── Companies ────────────────────────────────────────────────────────────────
 
@@ -193,7 +189,10 @@ pub async fn update_bank_account(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateBankAccountRequest>,
 ) -> Result<Json<BankAccountResponse>, ApiError> {
-    let res = state.master_data_service.update_bank_account(id, req).await?;
+    let res = state
+        .master_data_service
+        .update_bank_account(id, req)
+        .await?;
     Ok(Json(res))
 }
 
@@ -202,7 +201,10 @@ pub async fn list_bank_accounts(
     _user: AuthenticatedUser,
     Path(company_id): Path<Uuid>,
 ) -> Result<Json<Vec<BankAccountResponse>>, ApiError> {
-    let res = state.master_data_service.list_bank_accounts(company_id).await?;
+    let res = state
+        .master_data_service
+        .list_bank_accounts(company_id)
+        .await?;
     Ok(Json(res))
 }
 
@@ -283,4 +285,3 @@ pub async fn list_branches(
     let res = state.master_data_service.list_branches(company_id).await?;
     Ok(Json(res))
 }
-

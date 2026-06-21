@@ -2,11 +2,8 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::invoice_repository::InvoiceRepository,
-};
-use finance_assistant_domain::entities::invoice::{SalesInvoice, PurchaseInvoice, InvoiceLine};
+use finance_assistant_app::{errors::AppError, ports::invoice_repository::InvoiceRepository};
+use finance_assistant_domain::entities::invoice::{InvoiceLine, PurchaseInvoice, SalesInvoice};
 use finance_assistant_domain::value_objects::DocumentStatus;
 
 pub struct PgInvoiceRepository {
@@ -36,15 +33,17 @@ impl InvoiceRepository for PgInvoiceRepository {
 
         let invoice_row = match invoice_row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "SalesInvoice".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "SalesInvoice".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         let lines_rows = sqlx::query(
             r#"
-            SELECT id, sales_invoice_id, description, quantity, unit_price, discount_amount, tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order
+            SELECT id, sales_invoice_id, item_id, description, quantity, unit_price, discount_amount, tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order
             FROM sales_invoice_lines
             WHERE sales_invoice_id = $1
             ORDER BY sort_order ASC
@@ -59,6 +58,7 @@ impl InvoiceRepository for PgInvoiceRepository {
             .into_iter()
             .map(|r| InvoiceLine {
                 id: r.get("id"),
+                item_id: r.get("item_id"),
                 description: r.get("description"),
                 quantity: r.get("quantity"),
                 unit_price: r.get("unit_price"),
@@ -95,7 +95,12 @@ impl InvoiceRepository for PgInvoiceRepository {
         })
     }
 
-    async fn find_sales_by_company(&self, company_id: Uuid, page: u32, per_page: u32) -> Result<Vec<SalesInvoice>, AppError> {
+    async fn find_sales_by_company(
+        &self,
+        company_id: Uuid,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<SalesInvoice>, AppError> {
         let limit = per_page as i64;
         let offset = ((page.max(1) - 1) * per_page) as i64;
 
@@ -123,7 +128,7 @@ impl InvoiceRepository for PgInvoiceRepository {
 
         let lines_rows = sqlx::query(
             r#"
-            SELECT id, sales_invoice_id, description, quantity, unit_price, discount_amount, tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order
+            SELECT id, sales_invoice_id, item_id, description, quantity, unit_price, discount_amount, tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order
             FROM sales_invoice_lines
             WHERE sales_invoice_id = ANY($1)
             ORDER BY sort_order ASC
@@ -145,6 +150,7 @@ impl InvoiceRepository for PgInvoiceRepository {
                 if si_id == id {
                     invoice_lines.push(InvoiceLine {
                         id: lr.get("id"),
+                        item_id: lr.get("item_id"),
                         description: lr.get("description"),
                         quantity: lr.get("quantity"),
                         unit_price: lr.get("unit_price"),
@@ -203,7 +209,11 @@ impl InvoiceRepository for PgInvoiceRepository {
     }
 
     async fn save_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -239,9 +249,9 @@ impl InvoiceRepository for PgInvoiceRepository {
                 r#"
                 INSERT INTO sales_invoice_lines (
                     id, sales_invoice_id, description, quantity, unit_price, discount_amount,
-                    tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order
+                    tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order, item_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 "#,
             )
             .bind(line.id)
@@ -256,17 +266,24 @@ impl InvoiceRepository for PgInvoiceRepository {
             .bind(line.line_total)
             .bind(line.account_id)
             .bind(line.sort_order)
+            .bind(line.item_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| AppError::Internal(e.into()))?;
         }
 
-        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
 
     async fn update_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -319,9 +336,9 @@ impl InvoiceRepository for PgInvoiceRepository {
                 r#"
                 INSERT INTO sales_invoice_lines (
                     id, sales_invoice_id, description, quantity, unit_price, discount_amount,
-                    tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order
+                    tax_type_id, tax_rate, tax_amount, line_total, account_id, sort_order, item_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 "#,
             )
             .bind(line.id)
@@ -336,12 +353,15 @@ impl InvoiceRepository for PgInvoiceRepository {
             .bind(line.line_total)
             .bind(line.account_id)
             .bind(line.sort_order)
+            .bind(line.item_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| AppError::Internal(e.into()))?;
         }
 
-        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
 
@@ -361,15 +381,27 @@ impl InvoiceRepository for PgInvoiceRepository {
 
     // Purchase Invoice stubs (Task 009)
     async fn find_purchase_by_id(&self, _id: Uuid) -> Result<PurchaseInvoice, AppError> {
-        Err(AppError::NotFound { resource: "PurchaseInvoice".to_string(), id: _id.to_string() })
+        Err(AppError::NotFound {
+            resource: "PurchaseInvoice".to_string(),
+            id: _id.to_string(),
+        })
     }
     async fn save_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
-        Err(AppError::Internal(anyhow::anyhow!("PurchaseInvoice save not implemented")))
+        Err(AppError::Internal(anyhow::anyhow!(
+            "PurchaseInvoice save not implemented"
+        )))
     }
     async fn update_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
-        Err(AppError::Internal(anyhow::anyhow!("PurchaseInvoice update not implemented")))
+        Err(AppError::Internal(anyhow::anyhow!(
+            "PurchaseInvoice update not implemented"
+        )))
     }
-    async fn find_duplicate_purchase(&self, _company_id: Uuid, _supplier_id: Uuid, _invoice_number: &str) -> Result<bool, AppError> {
+    async fn find_duplicate_purchase(
+        &self,
+        _company_id: Uuid,
+        _supplier_id: Uuid,
+        _invoice_number: &str,
+    ) -> Result<bool, AppError> {
         Ok(false)
     }
 }

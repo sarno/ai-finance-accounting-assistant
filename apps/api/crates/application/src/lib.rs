@@ -4,7 +4,7 @@
 //! It defines **port traits** (Repository, StoragePort, etc.) that are
 //! implemented by the infrastructure crate.
 
+pub mod dto;
 pub mod errors;
 pub mod ports;
 pub mod services;
-pub mod dto;

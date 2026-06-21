@@ -1,7 +1,7 @@
+use finance_assistant_domain::entities::item::{Item, ItemCategory};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use finance_assistant_domain::entities::item::{ItemCategory, Item};
 
 // ─── Item Category DTOs ──────────────────────────────────────────────────────
 #[derive(Debug, Deserialize)]

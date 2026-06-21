@@ -3,10 +3,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{
-    errors::DomainError,
-    value_objects::DocumentStatus,
-};
+use crate::{errors::DomainError, value_objects::DocumentStatus};
 
 // ─── Sales Invoice ────────────────────────────────────────────────────────────
 
@@ -62,6 +59,7 @@ pub struct PurchaseInvoice {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvoiceLine {
     pub id: Uuid,
+    pub item_id: Option<Uuid>,
     pub description: String,
     pub quantity: Decimal,
     pub unit_price: Decimal,

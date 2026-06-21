@@ -2,11 +2,10 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::approval_repository::ApprovalRepository,
+use finance_assistant_app::{errors::AppError, ports::approval_repository::ApprovalRepository};
+use finance_assistant_domain::entities::approval::{
+    ApprovalDocumentType, ApprovalRequest, ApprovalStatus,
 };
-use finance_assistant_domain::entities::approval::{ApprovalRequest, ApprovalDocumentType, ApprovalStatus};
 
 pub struct PgApprovalRepository {
     pool: PgPool,
@@ -35,10 +34,12 @@ impl ApprovalRepository for PgApprovalRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "ApprovalRequest".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "ApprovalRequest".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         let doc_type_str: String = row.get("document_type");
@@ -64,7 +65,10 @@ impl ApprovalRepository for PgApprovalRepository {
         })
     }
 
-    async fn find_pending_by_company(&self, company_id: Uuid) -> Result<Vec<ApprovalRequest>, AppError> {
+    async fn find_pending_by_company(
+        &self,
+        company_id: Uuid,
+    ) -> Result<Vec<ApprovalRequest>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT id, company_id, document_type, document_id, status, requested_by, reviewed_by, reviewed_at, comment, created_at, updated_at
@@ -106,7 +110,10 @@ impl ApprovalRepository for PgApprovalRepository {
         Ok(requests)
     }
 
-    async fn find_by_document(&self, document_id: Uuid) -> Result<Option<ApprovalRequest>, AppError> {
+    async fn find_by_document(
+        &self,
+        document_id: Uuid,
+    ) -> Result<Option<ApprovalRequest>, AppError> {
         let row = sqlx::query(
             r#"
             SELECT id, company_id, document_type, document_id, status, requested_by, reviewed_by, reviewed_at, comment, created_at, updated_at

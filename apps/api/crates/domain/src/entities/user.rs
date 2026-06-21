@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -29,11 +29,20 @@ pub enum UserRole {
 
 impl UserRole {
     pub fn can_approve(&self) -> bool {
-        matches!(self, UserRole::Owner | UserRole::FinanceManager | UserRole::Admin)
+        matches!(
+            self,
+            UserRole::Owner | UserRole::FinanceManager | UserRole::Admin
+        )
     }
 
     pub fn can_post(&self) -> bool {
-        matches!(self, UserRole::Owner | UserRole::FinanceManager | UserRole::AccountingStaff | UserRole::Admin)
+        matches!(
+            self,
+            UserRole::Owner
+                | UserRole::FinanceManager
+                | UserRole::AccountingStaff
+                | UserRole::Admin
+        )
     }
 
     pub fn can_configure_tax(&self) -> bool {

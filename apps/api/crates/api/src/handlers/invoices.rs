@@ -4,12 +4,12 @@ use axum::{
     response::IntoResponse,
     response::Json,
 };
+use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
-use serde::Deserialize;
 
-use finance_assistant_app::dto::invoice::{CreateSalesInvoiceRequest, SalesInvoiceResponse};
 use crate::{errors::ApiError, middleware::auth_middleware::AuthenticatedUser, state::AppState};
+use finance_assistant_app::dto::invoice::{CreateSalesInvoiceRequest, SalesInvoiceResponse};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,7 +29,10 @@ pub async fn list_sales_invoices(
     let page = params.page.unwrap_or(1);
     let per_page = params.per_page.unwrap_or(20);
 
-    let total = state.invoice_service.count_sales_invoices(company_id).await?;
+    let total = state
+        .invoice_service
+        .count_sales_invoices(company_id)
+        .await?;
     let response = state
         .invoice_service
         .list_sales_invoices(company_id, page, per_page)
@@ -37,7 +40,10 @@ pub async fn list_sales_invoices(
 
     let mut headers = HeaderMap::new();
     headers.insert("x-total-count", total.to_string().parse().unwrap());
-    headers.insert("access-control-expose-headers", "x-total-count".parse().unwrap());
+    headers.insert(
+        "access-control-expose-headers",
+        "x-total-count".parse().unwrap(),
+    );
 
     Ok((headers, Json(response)))
 }
@@ -72,10 +78,7 @@ pub async fn update_sales_invoice(
     Path(id): Path<Uuid>,
     Json(req): Json<CreateSalesInvoiceRequest>,
 ) -> Result<Json<SalesInvoiceResponse>, ApiError> {
-    let response = state
-        .invoice_service
-        .update_sales_draft(id, req)
-        .await?;
+    let response = state.invoice_service.update_sales_draft(id, req).await?;
     Ok(Json(response))
 }
 
@@ -95,7 +98,10 @@ pub async fn submit_approval(
     AuthenticatedUser(user): AuthenticatedUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<SalesInvoiceResponse>, ApiError> {
-    state.approval_service.submit_sales_invoice_approval(id, user.id).await?;
+    state
+        .approval_service
+        .submit_sales_invoice_approval(id, user.id)
+        .await?;
     let response = state.invoice_service.get_sales_invoice(id).await?;
     Ok(Json(response))
 }

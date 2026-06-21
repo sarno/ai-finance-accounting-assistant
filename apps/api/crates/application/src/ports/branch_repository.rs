@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use finance_assistant_domain::entities::branch::Branch;
 use crate::errors::AppError;
+use finance_assistant_domain::entities::branch::Branch;
 
 #[async_trait]
 pub trait BranchRepository: Send + Sync {

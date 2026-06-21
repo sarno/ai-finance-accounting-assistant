@@ -2,7 +2,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use finance_assistant_domain::entities::invoice::{SalesInvoice, InvoiceLine};
+use finance_assistant_domain::entities::invoice::{InvoiceLine, SalesInvoice};
 
 // ─── Request ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,7 @@ pub struct CreateSalesInvoiceRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceLineRequest {
+    pub item_id: Option<Uuid>,
     pub description: String,
     pub quantity: Decimal,
     pub unit_price: Decimal,
@@ -65,6 +66,7 @@ pub struct SalesInvoiceResponse {
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceLineResponse {
     pub id: Uuid,
+    pub item_id: Option<Uuid>,
     pub description: String,
     pub quantity: Decimal,
     pub unit_price: Decimal,
@@ -87,7 +89,11 @@ impl From<SalesInvoice> for SalesInvoiceResponse {
             customer_id: si.customer_id,
             invoice_date: si.invoice_date,
             due_date: si.due_date,
-            lines: si.lines.into_iter().map(InvoiceLineResponse::from).collect(),
+            lines: si
+                .lines
+                .into_iter()
+                .map(InvoiceLineResponse::from)
+                .collect(),
             subtotal: si.subtotal,
             tax_amount: si.tax_amount,
             total_amount: si.total_amount,
@@ -105,6 +111,7 @@ impl From<InvoiceLine> for InvoiceLineResponse {
     fn from(il: InvoiceLine) -> Self {
         Self {
             id: il.id,
+            item_id: il.item_id,
             description: il.description,
             quantity: il.quantity,
             unit_price: il.unit_price,

@@ -1,16 +1,16 @@
 use std::sync::Arc;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use finance_assistant_domain::{
     entities::{
-        company::Company,
         account::Account,
+        bank_account::BankAccount,
+        branch::Branch,
+        company::Company,
         customer::Customer,
         supplier::Supplier,
-        bank_account::BankAccount,
-        tax::{TaxType, TaxCategory},
-        branch::Branch,
+        tax::{TaxCategory, TaxType},
     },
     value_objects::{AccountCode, AccountType},
 };
@@ -19,12 +19,9 @@ use crate::{
     dto::master_data::*,
     errors::AppError,
     ports::{
-        company_repository::CompanyRepository,
-        branch_repository::BranchRepository,
-        account_repository::AccountRepository,
-        customer_repository::CustomerRepository,
-        supplier_repository::SupplierRepository,
-        bank_account_repository::BankAccountRepository,
+        account_repository::AccountRepository, bank_account_repository::BankAccountRepository,
+        branch_repository::BranchRepository, company_repository::CompanyRepository,
+        customer_repository::CustomerRepository, supplier_repository::SupplierRepository,
         tax_repository::TaxRepository,
     },
 };
@@ -60,9 +57,11 @@ impl MasterDataService {
         }
     }
 
-
     // ─── Company Service Methods ─────────────────────────────────────────────
-    pub async fn create_company(&self, req: CreateCompanyRequest) -> Result<CompanyResponse, AppError> {
+    pub async fn create_company(
+        &self,
+        req: CreateCompanyRequest,
+    ) -> Result<CompanyResponse, AppError> {
         let company = Company::new(req.name, req.tax_number, req.address, req.currency);
         self.company_repo.save(&company).await?;
         Ok(CompanyResponse::from(company))
@@ -73,7 +72,11 @@ impl MasterDataService {
         Ok(CompanyResponse::from(company))
     }
 
-    pub async fn update_company(&self, id: Uuid, req: UpdateCompanyRequest) -> Result<CompanyResponse, AppError> {
+    pub async fn update_company(
+        &self,
+        id: Uuid,
+        req: UpdateCompanyRequest,
+    ) -> Result<CompanyResponse, AppError> {
         let mut company = self.company_repo.find_by_id(id).await?;
         company.name = req.name;
         company.tax_number = req.tax_number;
@@ -92,7 +95,10 @@ impl MasterDataService {
     }
 
     // ─── Branch Service Methods ─────────────────────────────────────────────
-    pub async fn create_branch(&self, req: CreateBranchRequest) -> Result<BranchResponse, AppError> {
+    pub async fn create_branch(
+        &self,
+        req: CreateBranchRequest,
+    ) -> Result<BranchResponse, AppError> {
         let now = OffsetDateTime::now_utc();
         let branch = Branch {
             id: Uuid::new_v4(),
@@ -114,7 +120,11 @@ impl MasterDataService {
         Ok(BranchResponse::from(branch))
     }
 
-    pub async fn update_branch(&self, id: Uuid, req: UpdateBranchRequest) -> Result<BranchResponse, AppError> {
+    pub async fn update_branch(
+        &self,
+        id: Uuid,
+        req: UpdateBranchRequest,
+    ) -> Result<BranchResponse, AppError> {
         let mut branch = self.branch_repo.find_by_id(id).await?;
         branch.code = req.code;
         branch.name = req.name;
@@ -132,9 +142,11 @@ impl MasterDataService {
         Ok(branches.into_iter().map(BranchResponse::from).collect())
     }
 
-
     // ─── Account (COA) Service Methods ───────────────────────────────────────
-    pub async fn create_account(&self, req: CreateAccountRequest) -> Result<AccountResponse, AppError> {
+    pub async fn create_account(
+        &self,
+        req: CreateAccountRequest,
+    ) -> Result<AccountResponse, AppError> {
         // Validate account type
         let account_type = match req.account_type.to_lowercase().as_str() {
             "asset" => AccountType::Asset,
@@ -142,13 +154,23 @@ impl MasterDataService {
             "equity" => AccountType::Equity,
             "revenue" => AccountType::Revenue,
             "expense" => AccountType::Expense,
-            _ => return Err(AppError::Validation { message: "Invalid account type".to_string() }),
+            _ => {
+                return Err(AppError::Validation {
+                    message: "Invalid account type".to_string(),
+                })
+            }
         };
 
         // Check uniqueness of code
         let code = AccountCode::new(req.code);
-        if let Some(_) = self.account_repo.find_by_code(req.company_id, &code).await? {
-            return Err(AppError::Conflict { message: format!("Account code '{}' already exists in company", code) });
+        if let Some(_) = self
+            .account_repo
+            .find_by_code(req.company_id, &code)
+            .await?
+        {
+            return Err(AppError::Conflict {
+                message: format!("Account code '{}' already exists in company", code),
+            });
         }
 
         let account = Account::new(req.company_id, code, req.name, account_type, req.parent_id);
@@ -161,22 +183,36 @@ impl MasterDataService {
         Ok(AccountResponse::from(account))
     }
 
-    pub async fn update_account(&self, id: Uuid, req: UpdateAccountRequest) -> Result<AccountResponse, AppError> {
+    pub async fn update_account(
+        &self,
+        id: Uuid,
+        req: UpdateAccountRequest,
+    ) -> Result<AccountResponse, AppError> {
         let mut account = self.account_repo.find_by_id(id).await?;
-        
+
         let account_type = match req.account_type.to_lowercase().as_str() {
             "asset" => AccountType::Asset,
             "liability" => AccountType::Liability,
             "equity" => AccountType::Equity,
             "revenue" => AccountType::Revenue,
             "expense" => AccountType::Expense,
-            _ => return Err(AppError::Validation { message: "Invalid account type".to_string() }),
+            _ => {
+                return Err(AppError::Validation {
+                    message: "Invalid account type".to_string(),
+                })
+            }
         };
 
         let new_code = AccountCode::new(req.code);
         if new_code != account.code {
-            if let Some(_) = self.account_repo.find_by_code(account.company_id, &new_code).await? {
-                return Err(AppError::Conflict { message: format!("Account code '{}' already exists in company", new_code) });
+            if let Some(_) = self
+                .account_repo
+                .find_by_code(account.company_id, &new_code)
+                .await?
+            {
+                return Err(AppError::Conflict {
+                    message: format!("Account code '{}' already exists in company", new_code),
+                });
             }
             account.code = new_code;
         }
@@ -197,8 +233,18 @@ impl MasterDataService {
     }
 
     // ─── Customer Service Methods ────────────────────────────────────────────
-    pub async fn create_customer(&self, req: CreateCustomerRequest) -> Result<CustomerResponse, AppError> {
-        let customer = Customer::new(req.company_id, req.name, req.tax_number, req.email, req.phone, req.address);
+    pub async fn create_customer(
+        &self,
+        req: CreateCustomerRequest,
+    ) -> Result<CustomerResponse, AppError> {
+        let customer = Customer::new(
+            req.company_id,
+            req.name,
+            req.tax_number,
+            req.email,
+            req.phone,
+            req.address,
+        );
         self.customer_repo.save(&customer).await?;
         Ok(CustomerResponse::from(customer))
     }
@@ -208,7 +254,11 @@ impl MasterDataService {
         Ok(CustomerResponse::from(customer))
     }
 
-    pub async fn update_customer(&self, id: Uuid, req: UpdateCustomerRequest) -> Result<CustomerResponse, AppError> {
+    pub async fn update_customer(
+        &self,
+        id: Uuid,
+        req: UpdateCustomerRequest,
+    ) -> Result<CustomerResponse, AppError> {
         let mut customer = self.customer_repo.find_by_id(id).await?;
         customer.name = req.name;
         customer.tax_number = req.tax_number;
@@ -222,14 +272,27 @@ impl MasterDataService {
         Ok(CustomerResponse::from(customer))
     }
 
-    pub async fn list_customers(&self, company_id: Uuid) -> Result<Vec<CustomerResponse>, AppError> {
+    pub async fn list_customers(
+        &self,
+        company_id: Uuid,
+    ) -> Result<Vec<CustomerResponse>, AppError> {
         let customers = self.customer_repo.find_all_by_company(company_id).await?;
         Ok(customers.into_iter().map(CustomerResponse::from).collect())
     }
 
     // ─── Supplier Service Methods ────────────────────────────────────────────
-    pub async fn create_supplier(&self, req: CreateSupplierRequest) -> Result<SupplierResponse, AppError> {
-        let supplier = Supplier::new(req.company_id, req.name, req.tax_number, req.email, req.phone, req.address);
+    pub async fn create_supplier(
+        &self,
+        req: CreateSupplierRequest,
+    ) -> Result<SupplierResponse, AppError> {
+        let supplier = Supplier::new(
+            req.company_id,
+            req.name,
+            req.tax_number,
+            req.email,
+            req.phone,
+            req.address,
+        );
         self.supplier_repo.save(&supplier).await?;
         Ok(SupplierResponse::from(supplier))
     }
@@ -239,7 +302,11 @@ impl MasterDataService {
         Ok(SupplierResponse::from(supplier))
     }
 
-    pub async fn update_supplier(&self, id: Uuid, req: UpdateSupplierRequest) -> Result<SupplierResponse, AppError> {
+    pub async fn update_supplier(
+        &self,
+        id: Uuid,
+        req: UpdateSupplierRequest,
+    ) -> Result<SupplierResponse, AppError> {
         let mut supplier = self.supplier_repo.find_by_id(id).await?;
         supplier.name = req.name;
         supplier.tax_number = req.tax_number;
@@ -253,13 +320,19 @@ impl MasterDataService {
         Ok(SupplierResponse::from(supplier))
     }
 
-    pub async fn list_suppliers(&self, company_id: Uuid) -> Result<Vec<SupplierResponse>, AppError> {
+    pub async fn list_suppliers(
+        &self,
+        company_id: Uuid,
+    ) -> Result<Vec<SupplierResponse>, AppError> {
         let suppliers = self.supplier_repo.find_all_by_company(company_id).await?;
         Ok(suppliers.into_iter().map(SupplierResponse::from).collect())
     }
 
     // ─── BankAccount Service Methods ─────────────────────────────────────────
-    pub async fn create_bank_account(&self, req: CreateBankAccountRequest) -> Result<BankAccountResponse, AppError> {
+    pub async fn create_bank_account(
+        &self,
+        req: CreateBankAccountRequest,
+    ) -> Result<BankAccountResponse, AppError> {
         let bank_account = BankAccount::new(
             req.company_id,
             req.account_id,
@@ -277,7 +350,11 @@ impl MasterDataService {
         Ok(BankAccountResponse::from(bank_account))
     }
 
-    pub async fn update_bank_account(&self, id: Uuid, req: UpdateBankAccountRequest) -> Result<BankAccountResponse, AppError> {
+    pub async fn update_bank_account(
+        &self,
+        id: Uuid,
+        req: UpdateBankAccountRequest,
+    ) -> Result<BankAccountResponse, AppError> {
         let mut bank_account = self.bank_account_repo.find_by_id(id).await?;
         bank_account.account_id = req.account_id;
         bank_account.bank_name = req.bank_name;
@@ -291,13 +368,25 @@ impl MasterDataService {
         Ok(BankAccountResponse::from(bank_account))
     }
 
-    pub async fn list_bank_accounts(&self, company_id: Uuid) -> Result<Vec<BankAccountResponse>, AppError> {
-        let bank_accounts = self.bank_account_repo.find_all_by_company(company_id).await?;
-        Ok(bank_accounts.into_iter().map(BankAccountResponse::from).collect())
+    pub async fn list_bank_accounts(
+        &self,
+        company_id: Uuid,
+    ) -> Result<Vec<BankAccountResponse>, AppError> {
+        let bank_accounts = self
+            .bank_account_repo
+            .find_all_by_company(company_id)
+            .await?;
+        Ok(bank_accounts
+            .into_iter()
+            .map(BankAccountResponse::from)
+            .collect())
     }
 
     // ─── TaxType Service Methods ─────────────────────────────────────────────
-    pub async fn create_tax_type(&self, req: CreateTaxTypeRequest) -> Result<TaxTypeResponse, AppError> {
+    pub async fn create_tax_type(
+        &self,
+        req: CreateTaxTypeRequest,
+    ) -> Result<TaxTypeResponse, AppError> {
         let category = match req.category.to_lowercase().as_str() {
             "vat_output" | "vatoutput" => TaxCategory::VatOutput,
             "vat_input" | "vatinput" => TaxCategory::VatInput,
@@ -305,7 +394,11 @@ impl MasterDataService {
             "withholding_pph23" | "withholdingpph23" => TaxCategory::WithholdingPph23,
             "withholding_pph25" | "withholdingpph25" => TaxCategory::WithholdingPph25,
             "withholding_pph_final" | "withholdingpphfinal" => TaxCategory::WithholdingPphFinal,
-            _ => return Err(AppError::Validation { message: "Invalid tax category".to_string() }),
+            _ => {
+                return Err(AppError::Validation {
+                    message: "Invalid tax category".to_string(),
+                })
+            }
         };
 
         let now = OffsetDateTime::now_utc();
@@ -333,7 +426,11 @@ impl MasterDataService {
         Ok(TaxTypeResponse::from(tax_type))
     }
 
-    pub async fn update_tax_type(&self, id: Uuid, req: UpdateTaxTypeRequest) -> Result<TaxTypeResponse, AppError> {
+    pub async fn update_tax_type(
+        &self,
+        id: Uuid,
+        req: UpdateTaxTypeRequest,
+    ) -> Result<TaxTypeResponse, AppError> {
         let mut tax_type = self.tax_repo.find_by_id(id).await?;
 
         let category = match req.category.to_lowercase().as_str() {
@@ -343,7 +440,11 @@ impl MasterDataService {
             "withholding_pph23" | "withholdingpph23" => TaxCategory::WithholdingPph23,
             "withholding_pph25" | "withholdingpph25" => TaxCategory::WithholdingPph25,
             "withholding_pph_final" | "withholdingpphfinal" => TaxCategory::WithholdingPphFinal,
-            _ => return Err(AppError::Validation { message: "Invalid tax category".to_string() }),
+            _ => {
+                return Err(AppError::Validation {
+                    message: "Invalid tax category".to_string(),
+                })
+            }
         };
 
         tax_type.name = req.name;

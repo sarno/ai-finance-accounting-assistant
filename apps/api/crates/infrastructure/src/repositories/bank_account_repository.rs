@@ -3,8 +3,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use finance_assistant_app::{
-    errors::AppError,
-    ports::bank_account_repository::BankAccountRepository,
+    errors::AppError, ports::bank_account_repository::BankAccountRepository,
 };
 use finance_assistant_domain::entities::bank_account::BankAccount;
 
@@ -35,10 +34,12 @@ impl BankAccountRepository for PgBankAccountRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "BankAccount".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "BankAccount".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         Ok(BankAccount {

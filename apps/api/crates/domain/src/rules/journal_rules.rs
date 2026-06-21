@@ -8,7 +8,10 @@ pub fn validate_journal_balance(lines: &[JournalLine]) -> Result<(), DomainError
     let total_credit: Decimal = lines.iter().map(|l| l.credit).sum();
 
     if total_debit != total_credit {
-        return Err(DomainError::JournalNotBalanced { total_debit, total_credit });
+        return Err(DomainError::JournalNotBalanced {
+            total_debit,
+            total_credit,
+        });
     }
     Ok(())
 }

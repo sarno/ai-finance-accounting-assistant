@@ -2,11 +2,8 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::item_repository::ItemRepository,
-};
-use finance_assistant_domain::entities::item::{ItemCategory, Item};
+use finance_assistant_app::{errors::AppError, ports::item_repository::ItemRepository};
+use finance_assistant_domain::entities::item::{Item, ItemCategory};
 
 pub struct PgItemRepository {
     pool: PgPool,
@@ -37,10 +34,12 @@ impl ItemRepository for PgItemRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "ItemCategory".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "ItemCategory".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         Ok(ItemCategory {
@@ -54,7 +53,10 @@ impl ItemRepository for PgItemRepository {
         })
     }
 
-    async fn find_categories_by_company(&self, company_id: Uuid) -> Result<Vec<ItemCategory>, AppError> {
+    async fn find_categories_by_company(
+        &self,
+        company_id: Uuid,
+    ) -> Result<Vec<ItemCategory>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT id, company_id, name, description, is_active, created_at, updated_at
@@ -157,10 +159,12 @@ impl ItemRepository for PgItemRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "Item".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "Item".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         Ok(Item {

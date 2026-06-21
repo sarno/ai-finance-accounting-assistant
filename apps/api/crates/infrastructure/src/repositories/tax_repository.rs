@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::tax_repository::TaxRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::tax_repository::TaxRepository};
 use finance_assistant_domain::entities::tax::{TaxCategory, TaxType};
 
 pub struct PgTaxRepository {
@@ -58,10 +55,12 @@ impl TaxRepository for PgTaxRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "TaxType".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "TaxType".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         let cat_str: String = row.get("category");

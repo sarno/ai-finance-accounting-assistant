@@ -1,13 +1,16 @@
-use async_trait::async_trait;
-use uuid::Uuid;
-use finance_assistant_domain::entities::item::{ItemCategory, Item};
 use crate::errors::AppError;
+use async_trait::async_trait;
+use finance_assistant_domain::entities::item::{Item, ItemCategory};
+use uuid::Uuid;
 
 #[async_trait]
 pub trait ItemRepository: Send + Sync {
     // Categories
     async fn find_category_by_id(&self, id: Uuid) -> Result<ItemCategory, AppError>;
-    async fn find_categories_by_company(&self, company_id: Uuid) -> Result<Vec<ItemCategory>, AppError>;
+    async fn find_categories_by_company(
+        &self,
+        company_id: Uuid,
+    ) -> Result<Vec<ItemCategory>, AppError>;
     async fn save_category(&self, category: &ItemCategory) -> Result<(), AppError>;
     async fn update_category(&self, category: &ItemCategory) -> Result<(), AppError>;
     async fn delete_category(&self, id: Uuid) -> Result<(), AppError>;

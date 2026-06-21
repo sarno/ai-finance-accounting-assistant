@@ -39,11 +39,17 @@ pub struct Money {
 
 impl Money {
     pub fn idr(amount: Decimal) -> Self {
-        Self { amount, currency: CurrencyCode::IDR }
+        Self {
+            amount,
+            currency: CurrencyCode::IDR,
+        }
     }
 
     pub fn zero() -> Self {
-        Self { amount: Decimal::ZERO, currency: CurrencyCode::IDR }
+        Self {
+            amount: Decimal::ZERO,
+            currency: CurrencyCode::IDR,
+        }
     }
 }
 

@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use uuid::Uuid;
 use rust_decimal::Decimal;
+use std::sync::Arc;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use finance_assistant_domain::{
-    entities::invoice::{SalesInvoice, InvoiceLine},
+    entities::invoice::{InvoiceLine, SalesInvoice},
     value_objects::DocumentStatus,
 };
 
@@ -12,14 +12,14 @@ use crate::{
     dto::invoice::{CreateSalesInvoiceRequest, SalesInvoiceResponse},
     errors::AppError,
     ports::{
-        invoice_repository::InvoiceRepository,
-        tax_repository::TaxRepository,
-        journal_repository::JournalRepository,
+        invoice_repository::InvoiceRepository, item_repository::ItemRepository,
+        journal_repository::JournalRepository, tax_repository::TaxRepository,
     },
 };
 
 pub struct InvoiceService {
     invoice_repo: Arc<dyn InvoiceRepository>,
+    item_repo: Arc<dyn ItemRepository>,
     tax_repo: Arc<dyn TaxRepository>,
     journal_repo: Arc<dyn JournalRepository>,
 }
@@ -27,22 +27,56 @@ pub struct InvoiceService {
 impl InvoiceService {
     pub fn new(
         invoice_repo: Arc<dyn InvoiceRepository>,
+        item_repo: Arc<dyn ItemRepository>,
         tax_repo: Arc<dyn TaxRepository>,
         journal_repo: Arc<dyn JournalRepository>,
     ) -> Self {
         Self {
             invoice_repo,
+            item_repo,
             tax_repo,
             journal_repo,
         }
     }
 
-    pub async fn create_sales_draft(&self, req: CreateSalesInvoiceRequest, created_by: Uuid) -> Result<SalesInvoiceResponse, AppError> {
+    async fn validate_line_item(
+        &self,
+        company_id: Uuid,
+        item_id: Option<Uuid>,
+    ) -> Result<Option<Uuid>, AppError> {
+        let Some(item_id) = item_id else {
+            return Ok(None);
+        };
+
+        let item = self.item_repo.find_item_by_id(item_id).await?;
+        if item.company_id != company_id {
+            return Err(AppError::Validation {
+                message: "Selected item does not belong to the invoice company".to_string(),
+            });
+        }
+        if !item.is_active {
+            return Err(AppError::Validation {
+                message: "Selected item is inactive".to_string(),
+            });
+        }
+
+        Ok(Some(item_id))
+    }
+
+    pub async fn create_sales_draft(
+        &self,
+        req: CreateSalesInvoiceRequest,
+        created_by: Uuid,
+    ) -> Result<SalesInvoiceResponse, AppError> {
+        let company_id = req.company_id;
         let mut subtotal = Decimal::ZERO;
         let mut tax_amount = Decimal::ZERO;
         let mut lines = Vec::new();
 
         for line_req in req.lines {
+            let item_id = self
+                .validate_line_item(company_id, line_req.item_id)
+                .await?;
             let (tax_rate, line_tax) = match line_req.tax_type_id {
                 Some(tax_id) => {
                     let tax_config = self.tax_repo.find_by_id(tax_id).await?;
@@ -68,6 +102,7 @@ impl InvoiceService {
 
             lines.push(InvoiceLine {
                 id: Uuid::new_v4(),
+                item_id,
                 description: line_req.description,
                 quantity,
                 unit_price,
@@ -107,15 +142,23 @@ impl InvoiceService {
         Ok(SalesInvoiceResponse::from(invoice))
     }
 
-    pub async fn update_sales_draft(&self, id: Uuid, req: CreateSalesInvoiceRequest) -> Result<SalesInvoiceResponse, AppError> {
+    pub async fn update_sales_draft(
+        &self,
+        id: Uuid,
+        req: CreateSalesInvoiceRequest,
+    ) -> Result<SalesInvoiceResponse, AppError> {
         let mut existing = self.invoice_repo.find_sales_by_id(id).await?;
         existing.ensure_editable()?;
 
+        let company_id = req.company_id;
         let mut subtotal = Decimal::ZERO;
         let mut tax_amount = Decimal::ZERO;
         let mut lines = Vec::new();
 
         for line_req in req.lines {
+            let item_id = self
+                .validate_line_item(company_id, line_req.item_id)
+                .await?;
             let (tax_rate, line_tax) = match line_req.tax_type_id {
                 Some(tax_id) => {
                     let tax_config = self.tax_repo.find_by_id(tax_id).await?;
@@ -141,6 +184,7 @@ impl InvoiceService {
 
             lines.push(InvoiceLine {
                 id: Uuid::new_v4(),
+                item_id,
                 description: line_req.description,
                 quantity,
                 unit_price,
@@ -176,8 +220,16 @@ impl InvoiceService {
         Ok(SalesInvoiceResponse::from(invoice))
     }
 
-    pub async fn list_sales_invoices(&self, company_id: Uuid, page: u32, per_page: u32) -> Result<Vec<SalesInvoiceResponse>, AppError> {
-        let list = self.invoice_repo.find_sales_by_company(company_id, page, per_page).await?;
+    pub async fn list_sales_invoices(
+        &self,
+        company_id: Uuid,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<SalesInvoiceResponse>, AppError> {
+        let list = self
+            .invoice_repo
+            .find_sales_by_company(company_id, page, per_page)
+            .await?;
         Ok(list.into_iter().map(SalesInvoiceResponse::from).collect())
     }
 
@@ -195,23 +247,36 @@ impl InvoiceService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-    use finance_assistant_domain::entities::tax::{TaxType, TaxCategory};
-    use finance_assistant_domain::entities::invoice::PurchaseInvoice;
-    use finance_assistant_domain::entities::journal::JournalEntry;
     use crate::dto::invoice::CreateInvoiceLineRequest;
+    use finance_assistant_domain::entities::invoice::PurchaseInvoice;
+    use finance_assistant_domain::entities::item::{Item, ItemCategory};
+    use finance_assistant_domain::entities::journal::JournalEntry;
+    use finance_assistant_domain::entities::tax::{TaxCategory, TaxType};
     use std::str::FromStr;
+    use std::sync::Mutex;
 
     struct MockInvoiceRepository {
         sales: Mutex<Vec<SalesInvoice>>,
     }
 
+    struct MockItemRepository {
+        item: Mutex<Option<Item>>,
+    }
+
     #[async_trait::async_trait]
     impl InvoiceRepository for MockInvoiceRepository {
         async fn find_sales_by_id(&self, _id: Uuid) -> Result<SalesInvoice, AppError> {
-            Err(AppError::NotFound { resource: "SalesInvoice".to_string(), id: _id.to_string() })
+            Err(AppError::NotFound {
+                resource: "SalesInvoice".to_string(),
+                id: _id.to_string(),
+            })
         }
-        async fn find_sales_by_company(&self, _company_id: Uuid, _page: u32, _per_page: u32) -> Result<Vec<SalesInvoice>, AppError> {
+        async fn find_sales_by_company(
+            &self,
+            _company_id: Uuid,
+            _page: u32,
+            _per_page: u32,
+        ) -> Result<Vec<SalesInvoice>, AppError> {
             Ok(vec![])
         }
         async fn count_sales_by_company(&self, _company_id: Uuid) -> Result<u64, AppError> {
@@ -228,7 +293,10 @@ mod tests {
             Ok(())
         }
         async fn find_purchase_by_id(&self, _id: Uuid) -> Result<PurchaseInvoice, AppError> {
-            Err(AppError::NotFound { resource: "PurchaseInvoice".to_string(), id: _id.to_string() })
+            Err(AppError::NotFound {
+                resource: "PurchaseInvoice".to_string(),
+                id: _id.to_string(),
+            })
         }
         async fn save_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
             Ok(())
@@ -236,8 +304,61 @@ mod tests {
         async fn update_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
             Ok(())
         }
-        async fn find_duplicate_purchase(&self, _company_id: Uuid, _supplier_id: Uuid, _invoice_number: &str) -> Result<bool, AppError> {
+        async fn find_duplicate_purchase(
+            &self,
+            _company_id: Uuid,
+            _supplier_id: Uuid,
+            _invoice_number: &str,
+        ) -> Result<bool, AppError> {
             Ok(false)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::ports::item_repository::ItemRepository for MockItemRepository {
+        async fn find_category_by_id(&self, _id: Uuid) -> Result<ItemCategory, AppError> {
+            Err(AppError::NotFound {
+                resource: "ItemCategory".to_string(),
+                id: _id.to_string(),
+            })
+        }
+        async fn find_categories_by_company(
+            &self,
+            _company_id: Uuid,
+        ) -> Result<Vec<ItemCategory>, AppError> {
+            Ok(vec![])
+        }
+        async fn save_category(&self, _category: &ItemCategory) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn update_category(&self, _category: &ItemCategory) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn delete_category(&self, _id: Uuid) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn find_item_by_id(&self, id: Uuid) -> Result<Item, AppError> {
+            self.item
+                .lock()
+                .unwrap()
+                .clone()
+                .filter(|item| item.id == id)
+                .ok_or(AppError::NotFound {
+                    resource: "Item".to_string(),
+                    id: id.to_string(),
+                })
+        }
+        async fn find_items_by_company(&self, _company_id: Uuid) -> Result<Vec<Item>, AppError> {
+            Ok(vec![])
+        }
+        async fn save_item(&self, _item: &Item) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn update_item(&self, _item: &Item) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn delete_item(&self, _id: Uuid) -> Result<(), AppError> {
+            Ok(())
         }
     }
 
@@ -254,7 +375,8 @@ mod tests {
                 category: TaxCategory::VatOutput,
                 default_rate: Decimal::from_str("0.10").unwrap(),
                 payable_account_id: Uuid::new_v4(),
-                effective_from: time::Date::from_calendar_date(2020, time::Month::January, 1).unwrap(),
+                effective_from: time::Date::from_calendar_date(2020, time::Month::January, 1)
+                    .unwrap(),
                 effective_to: None,
                 is_active: true,
                 created_at: OffsetDateTime::now_utc(),
@@ -277,9 +399,17 @@ mod tests {
     #[async_trait::async_trait]
     impl JournalRepository for MockJournalRepository {
         async fn find_by_id(&self, _id: Uuid) -> Result<JournalEntry, AppError> {
-            Err(AppError::NotFound { resource: "JournalEntry".to_string(), id: _id.to_string() })
+            Err(AppError::NotFound {
+                resource: "JournalEntry".to_string(),
+                id: _id.to_string(),
+            })
         }
-        async fn find_by_company(&self, _company_id: Uuid, _page: u32, _per_page: u32) -> Result<Vec<JournalEntry>, AppError> {
+        async fn find_by_company(
+            &self,
+            _company_id: Uuid,
+            _page: u32,
+            _per_page: u32,
+        ) -> Result<Vec<JournalEntry>, AppError> {
             Ok(vec![])
         }
         async fn save(&self, _entry: &JournalEntry) -> Result<(), AppError> {
@@ -291,7 +421,10 @@ mod tests {
         async fn delete(&self, _id: Uuid) -> Result<(), AppError> {
             Ok(())
         }
-        async fn save_lines(&self, _lines: &[finance_assistant_domain::entities::journal::JournalLine]) -> Result<(), AppError> {
+        async fn save_lines(
+            &self,
+            _lines: &[finance_assistant_domain::entities::journal::JournalLine],
+        ) -> Result<(), AppError> {
             Ok(())
         }
         async fn count_by_company(&self, _company_id: Uuid) -> Result<i64, AppError> {
@@ -301,13 +434,33 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_sales_draft_calculations() {
-        let invoice_repo = Arc::new(MockInvoiceRepository { sales: Mutex::new(vec![]) });
+        let invoice_repo = Arc::new(MockInvoiceRepository {
+            sales: Mutex::new(vec![]),
+        });
+        let company_id = Uuid::new_v4();
+        let item_id = Uuid::new_v4();
+        let item_repo = Arc::new(MockItemRepository {
+            item: Mutex::new(Some(Item {
+                id: item_id,
+                company_id,
+                category_id: None,
+                code: "SRV-001".to_string(),
+                name: "Item 1".to_string(),
+                description: Some("Linked item".to_string()),
+                unit_price: Decimal::from(100),
+                sale_account_id: Some(Uuid::new_v4()),
+                purchase_account_id: None,
+                tax_type_id: None,
+                is_active: true,
+                created_at: OffsetDateTime::now_utc(),
+                updated_at: OffsetDateTime::now_utc(),
+            })),
+        });
         let tax_repo = Arc::new(MockTaxRepository);
         let journal_repo = Arc::new(MockJournalRepository);
 
-        let service = InvoiceService::new(invoice_repo.clone(), tax_repo, journal_repo);
+        let service = InvoiceService::new(invoice_repo.clone(), item_repo, tax_repo, journal_repo);
 
-        let company_id = Uuid::new_v4();
         let customer_id = Uuid::new_v4();
         let account_id = Uuid::new_v4();
         let tax_type_id = Uuid::new_v4();
@@ -322,6 +475,7 @@ mod tests {
             notes: Some("Test note".to_string()),
             lines: vec![
                 CreateInvoiceLineRequest {
+                    item_id: Some(item_id),
                     description: "Item 1".to_string(),
                     quantity: Decimal::from(2),
                     unit_price: Decimal::from(100),
@@ -331,6 +485,7 @@ mod tests {
                     sort_order: 1,
                 },
                 CreateInvoiceLineRequest {
+                    item_id: Some(item_id),
                     description: "Item 2".to_string(),
                     quantity: Decimal::from(1),
                     unit_price: Decimal::from(50),
@@ -338,11 +493,14 @@ mod tests {
                     tax_type_id: None,
                     account_id,
                     sort_order: 2,
-                }
+                },
             ],
         };
 
-        let result = service.create_sales_draft(req, Uuid::new_v4()).await.unwrap();
+        let result = service
+            .create_sales_draft(req, Uuid::new_v4())
+            .await
+            .unwrap();
 
         assert_eq!(result.subtotal, Decimal::from(240)); // 190 + 50
         assert_eq!(result.tax_amount, Decimal::from(19)); // 19 + 0
@@ -354,7 +512,12 @@ mod tests {
         assert_eq!(saved[0].tax_amount, Decimal::from(19));
         assert_eq!(saved[0].total_amount, Decimal::from(259));
         assert_eq!(saved[0].lines.len(), 2);
-        assert_eq!(saved[0].lines[0].tax_rate, Some(Decimal::from_str("0.10").unwrap()));
+        assert_eq!(saved[0].lines[0].item_id, Some(item_id));
+        assert_eq!(saved[0].lines[1].item_id, Some(item_id));
+        assert_eq!(
+            saved[0].lines[0].tax_rate,
+            Some(Decimal::from_str("0.10").unwrap())
+        );
         assert_eq!(saved[0].lines[0].tax_amount, Decimal::from(19));
         assert_eq!(saved[0].lines[0].line_total, Decimal::from(209));
     }

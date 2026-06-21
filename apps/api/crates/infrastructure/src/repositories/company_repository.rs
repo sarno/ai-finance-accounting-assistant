@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::company_repository::CompanyRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::company_repository::CompanyRepository};
 use finance_assistant_domain::entities::company::Company;
 
 pub struct PgCompanyRepository {
@@ -35,10 +32,12 @@ impl CompanyRepository for PgCompanyRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "Company".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "Company".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         Ok(Company {

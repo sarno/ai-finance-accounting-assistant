@@ -1,12 +1,20 @@
+use crate::errors::AppError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use crate::errors::AppError;
 
 /// Port for external AI/LLM communication.
 #[async_trait]
 pub trait AiClientPort: Send + Sync {
-    async fn extract_invoice_fields(&self, document_bytes: &[u8], content_type: &str) -> Result<ExtractedInvoiceFields, AppError>;
-    async fn answer_financial_query(&self, context: &str, question: &str) -> Result<String, AppError>;
+    async fn extract_invoice_fields(
+        &self,
+        document_bytes: &[u8],
+        content_type: &str,
+    ) -> Result<ExtractedInvoiceFields, AppError>;
+    async fn answer_financial_query(
+        &self,
+        context: &str,
+        question: &str,
+    ) -> Result<String, AppError>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]

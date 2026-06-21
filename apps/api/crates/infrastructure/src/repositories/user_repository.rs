@@ -1,12 +1,9 @@
 use async_trait::async_trait;
 use sqlx::{PgPool, Row};
-use uuid::Uuid;
 use std::str::FromStr;
+use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::user_repository::UserRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::user_repository::UserRepository};
 use finance_assistant_domain::entities::user::{User, UserRole};
 
 pub struct PgUserRepository {
@@ -36,10 +33,12 @@ impl UserRepository for PgUserRepository {
 
         let user_row = match user_row {
             Some(row) => row,
-            None => return Err(AppError::NotFound {
-                resource: "User".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "User".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         let role_rows = sqlx::query(
@@ -70,7 +69,9 @@ impl UserRepository for PgUserRepository {
             password_hash: user_row.get("password_hash"),
             roles,
             is_active: user_row.get("is_active"),
-            last_login_at: user_row.get::<Option<time::OffsetDateTime>, _>("last_login_at").map(|t| t.into()),
+            last_login_at: user_row
+                .get::<Option<time::OffsetDateTime>, _>("last_login_at")
+                .map(|t| t.into()),
             created_at: user_row.get::<time::OffsetDateTime, _>("created_at").into(),
             updated_at: user_row.get::<time::OffsetDateTime, _>("updated_at").into(),
         })
@@ -122,14 +123,20 @@ impl UserRepository for PgUserRepository {
             password_hash: user_row.get("password_hash"),
             roles,
             is_active: user_row.get("is_active"),
-            last_login_at: user_row.get::<Option<time::OffsetDateTime>, _>("last_login_at").map(|t| t.into()),
+            last_login_at: user_row
+                .get::<Option<time::OffsetDateTime>, _>("last_login_at")
+                .map(|t| t.into()),
             created_at: user_row.get::<time::OffsetDateTime, _>("created_at").into(),
             updated_at: user_row.get::<time::OffsetDateTime, _>("updated_at").into(),
         }))
     }
 
     async fn save(&self, user: &User) -> Result<(), AppError> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -166,12 +173,18 @@ impl UserRepository for PgUserRepository {
             .map_err(|e| AppError::Internal(e.into()))?;
         }
 
-        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
 
     async fn update(&self, user: &User) -> Result<(), AppError> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -219,7 +232,9 @@ impl UserRepository for PgUserRepository {
             .map_err(|e| AppError::Internal(e.into()))?;
         }
 
-        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
 }

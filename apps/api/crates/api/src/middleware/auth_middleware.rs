@@ -13,7 +13,7 @@ use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,   // user_id as UUID string
+    pub sub: String, // user_id as UUID string
     pub company_id: String,
     pub roles: Vec<String>,
     pub exp: i64,

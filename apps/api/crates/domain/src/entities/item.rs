@@ -1,7 +1,7 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
-use rust_decimal::Decimal;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemCategory {

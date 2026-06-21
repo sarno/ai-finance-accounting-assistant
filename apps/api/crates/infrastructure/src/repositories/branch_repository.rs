@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::branch_repository::BranchRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::branch_repository::BranchRepository};
 use finance_assistant_domain::entities::branch::Branch;
 
 pub struct PgBranchRepository {
@@ -35,10 +32,12 @@ impl BranchRepository for PgBranchRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "Branch".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "Branch".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         Ok(Branch {

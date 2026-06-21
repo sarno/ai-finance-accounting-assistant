@@ -1,17 +1,17 @@
 //! DTOs (Data Transfer Objects) — request/response structs for the API layer.
 //! These are serializable and validated at the API boundary.
 
+pub mod approval;
 pub mod auth;
-pub mod journal;
 pub mod invoice;
+pub mod item;
+pub mod journal;
+pub mod master_data;
 pub mod payment;
 pub mod report;
-pub mod approval;
-pub mod master_data;
-pub mod item;
 
 pub mod date_format {
-    use serde::{Serializer, Deserializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
     use time::Date;
 
     pub fn serialize<S>(date: &Date, serializer: S) -> Result<S::Ok, S::Error>
@@ -27,13 +27,14 @@ pub mod date_format {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let format = time::format_description::parse("[year]-[month]-[day]").map_err(serde::de::Error::custom)?;
+        let format = time::format_description::parse("[year]-[month]-[day]")
+            .map_err(serde::de::Error::custom)?;
         Date::parse(&s, &format).map_err(serde::de::Error::custom)
     }
 }
 
 pub mod option_date_format {
-    use serde::{Serializer, Deserializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
     use time::Date;
 
     pub fn serialize<S>(date: &Option<Date>, serializer: S) -> Result<S::Ok, S::Error>
@@ -53,7 +54,8 @@ pub mod option_date_format {
         let s: Option<String> = Option::deserialize(deserializer)?;
         match s {
             Some(val) => {
-                let format = time::format_description::parse("[year]-[month]-[day]").map_err(serde::de::Error::custom)?;
+                let format = time::format_description::parse("[year]-[month]-[day]")
+                    .map_err(serde::de::Error::custom)?;
                 let date = Date::parse(&val, &format).map_err(serde::de::Error::custom)?;
                 Ok(Some(date))
             }
@@ -63,14 +65,15 @@ pub mod option_date_format {
 }
 
 pub mod datetime_format {
-    use serde::{Serializer, Deserializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
     use time::OffsetDateTime;
 
     pub fn serialize<S>(datetime: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let s = datetime.format(&time::format_description::well_known::Rfc3339)
+        let s = datetime
+            .format(&time::format_description::well_known::Rfc3339)
             .map_err(serde::ser::Error::custom)?;
         serializer.serialize_str(&s)
     }
@@ -86,7 +89,7 @@ pub mod datetime_format {
 }
 
 pub mod option_datetime_format {
-    use serde::{Serializer, Deserializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
     use time::OffsetDateTime;
 
     pub fn serialize<S>(datetime: &Option<OffsetDateTime>, serializer: S) -> Result<S::Ok, S::Error>
@@ -95,7 +98,8 @@ pub mod option_datetime_format {
     {
         match datetime {
             Some(dt) => {
-                let s = dt.format(&time::format_description::well_known::Rfc3339)
+                let s = dt
+                    .format(&time::format_description::well_known::Rfc3339)
                     .map_err(serde::ser::Error::custom)?;
                 serializer.serialize_some(&s)
             }
@@ -110,13 +114,12 @@ pub mod option_datetime_format {
         let s: Option<String> = Option::deserialize(deserializer)?;
         match s {
             Some(val) => {
-                let dt = OffsetDateTime::parse(&val, &time::format_description::well_known::Rfc3339)
-                    .map_err(serde::de::Error::custom)?;
+                let dt =
+                    OffsetDateTime::parse(&val, &time::format_description::well_known::Rfc3339)
+                        .map_err(serde::de::Error::custom)?;
                 Ok(Some(dt))
             }
             None => Ok(None),
         }
     }
 }
-
-

@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::supplier_repository::SupplierRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::supplier_repository::SupplierRepository};
 use finance_assistant_domain::entities::supplier::Supplier;
 
 pub struct PgSupplierRepository {
@@ -35,10 +32,12 @@ impl SupplierRepository for PgSupplierRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "Supplier".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "Supplier".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         Ok(Supplier {

@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use uuid::Uuid;
-use tracing::instrument;
 use rust_decimal::Decimal;
+use std::sync::Arc;
+use tracing::instrument;
+use uuid::Uuid;
 
 use finance_assistant_domain::{
-    entities::approval::{ApprovalRequest, ApprovalDocumentType, ApprovalStatus},
+    entities::approval::{ApprovalDocumentType, ApprovalRequest, ApprovalStatus},
     value_objects::DocumentStatus,
 };
 
@@ -12,13 +12,10 @@ use crate::{
     dto::approval::ApprovalResponse,
     errors::AppError,
     ports::{
-        approval_repository::ApprovalRepository,
-        journal_repository::JournalRepository,
-        audit_log_repository::AuditLogRepository,
+        account_repository::AccountRepository, approval_repository::ApprovalRepository,
+        audit_log_repository::AuditLogRepository, invoice_repository::InvoiceRepository,
+        journal_repository::JournalRepository, tax_repository::TaxRepository,
         user_repository::UserRepository,
-        invoice_repository::InvoiceRepository,
-        account_repository::AccountRepository,
-        tax_repository::TaxRepository,
     },
 };
 
@@ -94,12 +91,17 @@ impl ApprovalService {
 
     /// Submit a journal entry for approval.
     #[instrument(skip(self))]
-    pub async fn submit_journal_approval(&self, journal_id: Uuid, requested_by: Uuid) -> Result<ApprovalResponse, AppError> {
+    pub async fn submit_journal_approval(
+        &self,
+        journal_id: Uuid,
+        requested_by: Uuid,
+    ) -> Result<ApprovalResponse, AppError> {
         let mut journal = self.journal_repo.find_by_id(journal_id).await?;
-        
+
         if journal.status != DocumentStatus::Draft && journal.status != DocumentStatus::Rejected {
             return Err(AppError::Validation {
-                message: "Only draft or rejected journals can be submitted for approval".to_string(),
+                message: "Only draft or rejected journals can be submitted for approval"
+                    .to_string(),
             });
         }
 
@@ -148,12 +150,17 @@ impl ApprovalService {
 
     /// Submit a sales invoice for approval.
     #[instrument(skip(self))]
-    pub async fn submit_sales_invoice_approval(&self, invoice_id: Uuid, requested_by: Uuid) -> Result<ApprovalResponse, AppError> {
+    pub async fn submit_sales_invoice_approval(
+        &self,
+        invoice_id: Uuid,
+        requested_by: Uuid,
+    ) -> Result<ApprovalResponse, AppError> {
         let mut invoice = self.invoice_repo.find_sales_by_id(invoice_id).await?;
-        
+
         if invoice.status != DocumentStatus::Draft && invoice.status != DocumentStatus::Rejected {
             return Err(AppError::Validation {
-                message: "Only draft or rejected invoices can be submitted for approval".to_string(),
+                message: "Only draft or rejected invoices can be submitted for approval"
+                    .to_string(),
             });
         }
 
@@ -202,7 +209,12 @@ impl ApprovalService {
 
     /// Approve an approval request.
     #[instrument(skip(self))]
-    pub async fn approve_request(&self, id: Uuid, reviewed_by: Uuid, comment: Option<String>) -> Result<ApprovalResponse, AppError> {
+    pub async fn approve_request(
+        &self,
+        id: Uuid,
+        reviewed_by: Uuid,
+        comment: Option<String>,
+    ) -> Result<ApprovalResponse, AppError> {
         let mut req = self.approval_repo.find_by_id(id).await?;
         if req.status != ApprovalStatus::Pending {
             return Err(AppError::Validation {
@@ -234,10 +246,12 @@ impl ApprovalService {
                         message: "Only waiting approval invoices can be approved".to_string(),
                     });
                 }
-                
+
                 // 1. Resolve Accounts Receivable account (code 1200)
-                let ar_code = finance_assistant_domain::value_objects::AccountCode("1200".to_string());
-                let ar_account = self.account_repo
+                let ar_code =
+                    finance_assistant_domain::value_objects::AccountCode("1200".to_string());
+                let ar_account = self
+                    .account_repo
                     .find_by_code(invoice.company_id, &ar_code)
                     .await?
                     .ok_or_else(|| AppError::Validation {
@@ -268,15 +282,17 @@ impl ApprovalService {
                             message: "Missing tax type configuration for tax amount".to_string(),
                         })?;
                         let tax_config = self.tax_repo.find_by_id(tax_id).await?;
-                        journal_lines.push(finance_assistant_domain::entities::journal::JournalLine {
-                            id: Uuid::new_v4(),
-                            journal_entry_id: journal_id,
-                            account_id: tax_config.payable_account_id,
-                            debit: Decimal::ZERO,
-                            credit: line.tax_amount,
-                            description: Some(format!("Tax for: {}", line.description)),
-                            sort_order,
-                        });
+                        journal_lines.push(
+                            finance_assistant_domain::entities::journal::JournalLine {
+                                id: Uuid::new_v4(),
+                                journal_entry_id: journal_id,
+                                account_id: tax_config.payable_account_id,
+                                debit: Decimal::ZERO,
+                                credit: line.tax_amount,
+                                description: Some(format!("Tax for: {}", line.description)),
+                                sort_order,
+                            },
+                        );
                         sort_order += 1;
                     }
                 }
@@ -301,7 +317,8 @@ impl ApprovalService {
                     transaction_date: invoice.invoice_date,
                     lines: journal_lines,
                     status: DocumentStatus::Posted, // Directly posted
-                    source: finance_assistant_domain::entities::journal::JournalSource::SalesInvoice,
+                    source:
+                        finance_assistant_domain::entities::journal::JournalSource::SalesInvoice,
                     source_document_id: Some(invoice.id),
                     created_by: invoice.created_by,
                     posted_by: Some(reviewed_by),
@@ -330,7 +347,12 @@ impl ApprovalService {
 
     /// Reject an approval request.
     #[instrument(skip(self))]
-    pub async fn reject_request(&self, id: Uuid, reviewed_by: Uuid, comment: Option<String>) -> Result<ApprovalResponse, AppError> {
+    pub async fn reject_request(
+        &self,
+        id: Uuid,
+        reviewed_by: Uuid,
+        comment: Option<String>,
+    ) -> Result<ApprovalResponse, AppError> {
         let mut req = self.approval_repo.find_by_id(id).await?;
         if req.status != ApprovalStatus::Pending {
             return Err(AppError::Validation {
@@ -372,7 +394,10 @@ impl ApprovalService {
 
     /// List all pending approval requests for a company.
     pub async fn list_pending(&self, company_id: Uuid) -> Result<Vec<ApprovalResponse>, AppError> {
-        let list = self.approval_repo.find_pending_by_company(company_id).await?;
+        let list = self
+            .approval_repo
+            .find_pending_by_company(company_id)
+            .await?;
         let mut responses = Vec::new();
         for r in list {
             responses.push(self.enrich_response(r).await);
@@ -390,15 +415,15 @@ impl ApprovalService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-    use finance_assistant_domain::entities::journal::{JournalEntry, JournalLine};
-    use finance_assistant_domain::entities::invoice::{SalesInvoice, PurchaseInvoice, InvoiceLine};
-    use finance_assistant_domain::entities::tax::{TaxType, TaxCategory};
     use finance_assistant_domain::entities::account::Account;
-    use finance_assistant_domain::entities::user::{User, UserRole};
     use finance_assistant_domain::entities::audit::AuditLog;
+    use finance_assistant_domain::entities::invoice::{InvoiceLine, PurchaseInvoice, SalesInvoice};
+    use finance_assistant_domain::entities::journal::{JournalEntry, JournalLine};
+    use finance_assistant_domain::entities::tax::{TaxCategory, TaxType};
+    use finance_assistant_domain::entities::user::{User, UserRole};
     use finance_assistant_domain::value_objects::{AccountCode, AccountType, DocumentStatus};
     use std::str::FromStr;
+    use std::sync::Mutex;
     use time::OffsetDateTime;
 
     struct MockApprovalRepository {
@@ -408,16 +433,27 @@ mod tests {
     #[async_trait::async_trait]
     impl ApprovalRepository for MockApprovalRepository {
         async fn find_by_id(&self, _id: Uuid) -> Result<ApprovalRequest, AppError> {
-            let req = self.request.lock().unwrap().clone().ok_or_else(|| AppError::NotFound {
-                resource: "ApprovalRequest".to_string(),
-                id: _id.to_string(),
-            })?;
+            let req = self
+                .request
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| AppError::NotFound {
+                    resource: "ApprovalRequest".to_string(),
+                    id: _id.to_string(),
+                })?;
             Ok(req)
         }
-        async fn find_pending_by_company(&self, _company_id: Uuid) -> Result<Vec<ApprovalRequest>, AppError> {
+        async fn find_pending_by_company(
+            &self,
+            _company_id: Uuid,
+        ) -> Result<Vec<ApprovalRequest>, AppError> {
             Ok(vec![])
         }
-        async fn find_by_document(&self, _document_id: Uuid) -> Result<Option<ApprovalRequest>, AppError> {
+        async fn find_by_document(
+            &self,
+            _document_id: Uuid,
+        ) -> Result<Option<ApprovalRequest>, AppError> {
             Ok(self.request.lock().unwrap().clone())
         }
         async fn save(&self, request: &ApprovalRequest) -> Result<(), AppError> {
@@ -437,13 +473,23 @@ mod tests {
     #[async_trait::async_trait]
     impl JournalRepository for MockJournalRepository {
         async fn find_by_id(&self, _id: Uuid) -> Result<JournalEntry, AppError> {
-            let entry = self.entry.lock().unwrap().clone().ok_or_else(|| AppError::NotFound {
-                resource: "JournalEntry".to_string(),
-                id: _id.to_string(),
-            })?;
+            let entry = self
+                .entry
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| AppError::NotFound {
+                    resource: "JournalEntry".to_string(),
+                    id: _id.to_string(),
+                })?;
             Ok(entry)
         }
-        async fn find_by_company(&self, _company_id: Uuid, _page: u32, _per_page: u32) -> Result<Vec<JournalEntry>, AppError> {
+        async fn find_by_company(
+            &self,
+            _company_id: Uuid,
+            _page: u32,
+            _per_page: u32,
+        ) -> Result<Vec<JournalEntry>, AppError> {
             Ok(vec![])
         }
         async fn save(&self, entry: &JournalEntry) -> Result<(), AppError> {
@@ -472,7 +518,11 @@ mod tests {
         async fn append(&self, _log: &AuditLog) -> Result<(), AppError> {
             Ok(())
         }
-        async fn find_by_entity(&self, _entity_type: &str, _entity_id: Uuid) -> Result<Vec<AuditLog>, AppError> {
+        async fn find_by_entity(
+            &self,
+            _entity_type: &str,
+            _entity_id: Uuid,
+        ) -> Result<Vec<AuditLog>, AppError> {
             Ok(vec![])
         }
     }
@@ -513,13 +563,23 @@ mod tests {
     #[async_trait::async_trait]
     impl InvoiceRepository for MockInvoiceRepository {
         async fn find_sales_by_id(&self, _id: Uuid) -> Result<SalesInvoice, AppError> {
-            let inv = self.sales.lock().unwrap().clone().ok_or_else(|| AppError::NotFound {
-                resource: "SalesInvoice".to_string(),
-                id: _id.to_string(),
-            })?;
+            let inv = self
+                .sales
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| AppError::NotFound {
+                    resource: "SalesInvoice".to_string(),
+                    id: _id.to_string(),
+                })?;
             Ok(inv)
         }
-        async fn find_sales_by_company(&self, _company_id: Uuid, _page: u32, _per_page: u32) -> Result<Vec<SalesInvoice>, AppError> {
+        async fn find_sales_by_company(
+            &self,
+            _company_id: Uuid,
+            _page: u32,
+            _per_page: u32,
+        ) -> Result<Vec<SalesInvoice>, AppError> {
             Ok(vec![])
         }
         async fn count_sales_by_company(&self, _company_id: Uuid) -> Result<u64, AppError> {
@@ -537,7 +597,10 @@ mod tests {
             Ok(())
         }
         async fn find_purchase_by_id(&self, _id: Uuid) -> Result<PurchaseInvoice, AppError> {
-            Err(AppError::NotFound { resource: "PurchaseInvoice".to_string(), id: _id.to_string() })
+            Err(AppError::NotFound {
+                resource: "PurchaseInvoice".to_string(),
+                id: _id.to_string(),
+            })
         }
         async fn save_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
             Ok(())
@@ -545,7 +608,12 @@ mod tests {
         async fn update_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
             Ok(())
         }
-        async fn find_duplicate_purchase(&self, _company_id: Uuid, _supplier_id: Uuid, _invoice_number: &str) -> Result<bool, AppError> {
+        async fn find_duplicate_purchase(
+            &self,
+            _company_id: Uuid,
+            _supplier_id: Uuid,
+            _invoice_number: &str,
+        ) -> Result<bool, AppError> {
             Ok(false)
         }
     }
@@ -567,7 +635,11 @@ mod tests {
                 updated_at: OffsetDateTime::now_utc(),
             })
         }
-        async fn find_by_code(&self, company_id: Uuid, code: &AccountCode) -> Result<Option<Account>, AppError> {
+        async fn find_by_code(
+            &self,
+            company_id: Uuid,
+            code: &AccountCode,
+        ) -> Result<Option<Account>, AppError> {
             Ok(Some(Account {
                 id: Uuid::new_v4(),
                 company_id,
@@ -604,7 +676,8 @@ mod tests {
                 category: TaxCategory::VatOutput,
                 default_rate: Decimal::from_str("0.10").unwrap(),
                 payable_account_id: Uuid::new_v4(),
-                effective_from: time::Date::from_calendar_date(2020, time::Month::January, 1).unwrap(),
+                effective_from: time::Date::from_calendar_date(2020, time::Month::January, 1)
+                    .unwrap(),
                 effective_to: None,
                 is_active: true,
                 created_at: OffsetDateTime::now_utc(),
@@ -624,11 +697,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_and_approve_sales_invoice() {
-        let approval_repo = Arc::new(MockApprovalRepository { request: Mutex::new(None) });
-        let journal_repo = Arc::new(MockJournalRepository { entry: Mutex::new(None) });
+        let approval_repo = Arc::new(MockApprovalRepository {
+            request: Mutex::new(None),
+        });
+        let journal_repo = Arc::new(MockJournalRepository {
+            entry: Mutex::new(None),
+        });
         let audit_repo = Arc::new(MockAuditLogRepository);
         let user_repo = Arc::new(MockUserRepository);
-        let invoice_repo = Arc::new(MockInvoiceRepository { sales: Mutex::new(None) });
+        let invoice_repo = Arc::new(MockInvoiceRepository {
+            sales: Mutex::new(None),
+        });
         let account_repo = Arc::new(MockAccountRepository);
         let tax_repo = Arc::new(MockTaxRepository);
 
@@ -658,6 +737,7 @@ mod tests {
             due_date: time::Date::from_calendar_date(2026, time::Month::July, 21).unwrap(),
             lines: vec![InvoiceLine {
                 id: Uuid::new_v4(),
+                item_id: None,
                 description: "Taxable Item".to_string(),
                 quantity: Decimal::from(1),
                 unit_price: Decimal::from(100),
@@ -682,15 +762,21 @@ mod tests {
         *invoice_repo.sales.lock().unwrap() = Some(draft_invoice);
 
         // 2. Submit approval
-        let submit_res = service.submit_sales_invoice_approval(invoice_id, user_id).await.unwrap();
+        let submit_res = service
+            .submit_sales_invoice_approval(invoice_id, user_id)
+            .await
+            .unwrap();
         assert_eq!(submit_res.status, "pending");
- 
+
         let updated_inv = invoice_repo.sales.lock().unwrap().clone().unwrap();
         assert_eq!(updated_inv.status, DocumentStatus::WaitingApproval);
- 
+
         // 3. Approve request
         let approval_req_id = submit_res.id;
-        let approve_res = service.approve_request(approval_req_id, user_id, Some("Approved".to_string())).await.unwrap();
+        let approve_res = service
+            .approve_request(approval_req_id, user_id, Some("Approved".to_string()))
+            .await
+            .unwrap();
         assert_eq!(approve_res.status, "approved");
 
         // Verify status transitioned to Posted

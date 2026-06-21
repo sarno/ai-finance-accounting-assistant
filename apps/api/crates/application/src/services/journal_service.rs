@@ -1,20 +1,17 @@
 use std::sync::Arc;
-use uuid::Uuid;
 use tracing::instrument;
+use uuid::Uuid;
 
 use finance_assistant_domain::{
     entities::journal::{JournalEntry, JournalLine, JournalSource},
-    value_objects::DocumentStatus,
     rules::journal_rules,
+    value_objects::DocumentStatus,
 };
 
 use crate::{
     dto::journal::{CreateJournalDraftRequest, JournalResponse},
     errors::AppError,
-    ports::{
-        journal_repository::JournalRepository,
-        audit_log_repository::AuditLogRepository,
-    },
+    ports::{audit_log_repository::AuditLogRepository, journal_repository::JournalRepository},
 };
 
 pub struct JournalService {
@@ -27,7 +24,10 @@ impl JournalService {
         journal_repo: Arc<dyn JournalRepository>,
         audit_repo: Arc<dyn AuditLogRepository>,
     ) -> Self {
-        Self { journal_repo, audit_repo }
+        Self {
+            journal_repo,
+            audit_repo,
+        }
     }
 
     /// Create a draft journal entry (AI or manual).
@@ -39,15 +39,20 @@ impl JournalService {
         created_by: Uuid,
     ) -> Result<JournalResponse, AppError> {
         // Validate balance before even saving
-        let lines: Vec<JournalLine> = req.lines.into_iter().enumerate().map(|(i, l)| JournalLine {
-            id: Uuid::new_v4(),
-            journal_entry_id: Uuid::nil(), // will be replaced after save
-            account_id: l.account_id,
-            debit: l.debit,
-            credit: l.credit,
-            description: l.description,
-            sort_order: i as i32,
-        }).collect();
+        let lines: Vec<JournalLine> = req
+            .lines
+            .into_iter()
+            .enumerate()
+            .map(|(i, l)| JournalLine {
+                id: Uuid::new_v4(),
+                journal_entry_id: Uuid::nil(), // will be replaced after save
+                account_id: l.account_id,
+                debit: l.debit,
+                credit: l.credit,
+                description: l.description,
+                sort_order: i as i32,
+            })
+            .collect();
 
         journal_rules::validate_journal_balance(&lines)?;
         journal_rules::validate_journal_line_sides(&lines)?;
@@ -89,7 +94,11 @@ impl JournalService {
 
     /// Post a journal. Requires status == Approved.
     #[instrument(skip(self), fields(journal_id = %id))]
-    pub async fn post_journal(&self, id: Uuid, posted_by: Uuid) -> Result<JournalResponse, AppError> {
+    pub async fn post_journal(
+        &self,
+        id: Uuid,
+        posted_by: Uuid,
+    ) -> Result<JournalResponse, AppError> {
         let mut entry = self.journal_repo.find_by_id(id).await?;
 
         entry.post(posted_by).map_err(AppError::Domain)?;
@@ -108,8 +117,16 @@ impl JournalService {
     }
 
     /// List general journal entries for a company (paginated).
-    pub async fn list_journals(&self, company_id: Uuid, page: u32, per_page: u32) -> Result<Vec<JournalResponse>, AppError> {
-        let entries = self.journal_repo.find_by_company(company_id, page, per_page).await?;
+    pub async fn list_journals(
+        &self,
+        company_id: Uuid,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<JournalResponse>, AppError> {
+        let entries = self
+            .journal_repo
+            .find_by_company(company_id, page, per_page)
+            .await?;
         Ok(entries.into_iter().map(JournalResponse::from).collect())
     }
 
@@ -117,7 +134,9 @@ impl JournalService {
     pub async fn submit_approval(&self, id: Uuid) -> Result<JournalResponse, AppError> {
         let mut entry = self.journal_repo.find_by_id(id).await?;
         if entry.status != DocumentStatus::Draft {
-            return Err(AppError::Validation { message: "Only draft journals can be submitted for approval".to_string() });
+            return Err(AppError::Validation {
+                message: "Only draft journals can be submitted for approval".to_string(),
+            });
         }
         entry.status = DocumentStatus::WaitingApproval;
         entry.updated_at = time::OffsetDateTime::now_utc();

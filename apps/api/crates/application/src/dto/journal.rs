@@ -6,7 +6,7 @@ use finance_assistant_domain::entities::journal::{JournalEntry, JournalLine, Jou
 use finance_assistant_domain::value_objects::DocumentStatus;
 
 // ─── Request ──────────────────────────────────────────────────────────────────
- 
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateJournalDraftRequest {
@@ -18,7 +18,7 @@ pub struct CreateJournalDraftRequest {
     pub transaction_date: time::Date,
     pub lines: Vec<CreateJournalLineRequest>,
 }
- 
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateJournalLineRequest {
@@ -27,9 +27,9 @@ pub struct CreateJournalLineRequest {
     pub credit: Decimal,
     pub description: Option<String>,
 }
- 
+
 // ─── Response ─────────────────────────────────────────────────────────────────
- 
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JournalResponse {
@@ -47,7 +47,7 @@ pub struct JournalResponse {
     #[serde(with = "crate::dto::datetime_format")]
     pub created_at: time::OffsetDateTime,
 }
- 
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JournalLineResponse {

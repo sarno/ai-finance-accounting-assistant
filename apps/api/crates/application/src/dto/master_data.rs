@@ -4,13 +4,13 @@ use uuid::Uuid;
 
 use finance_assistant_domain::{
     entities::{
-        company::Company,
         account::Account,
+        bank_account::BankAccount,
+        branch::Branch,
+        company::Company,
         customer::Customer,
         supplier::Supplier,
-        bank_account::BankAccount,
-        tax::{TaxType, TaxCategory},
-        branch::Branch,
+        tax::{TaxCategory, TaxType},
     },
     value_objects::AccountType,
 };
@@ -353,7 +353,7 @@ impl From<TaxType> for TaxTypeResponse {
             is_active: t.is_active,
             created_at: t.created_at,
         }
-     }
+    }
 }
 
 // ─── Branch DTOs ──────────────────────────────────────────────────────────────
@@ -405,4 +405,3 @@ impl From<Branch> for BranchResponse {
         }
     }
 }
-

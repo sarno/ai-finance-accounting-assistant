@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::journal_repository::JournalRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::journal_repository::JournalRepository};
 use finance_assistant_domain::{
     entities::journal::{JournalEntry, JournalLine, JournalSource},
     value_objects::DocumentStatus,
@@ -52,10 +49,12 @@ impl JournalRepository for PgJournalRepository {
 
         let entry_row = match entry_row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "JournalEntry".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "JournalEntry".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         let lines_rows = sqlx::query(
@@ -197,7 +196,11 @@ impl JournalRepository for PgJournalRepository {
     }
 
     async fn save(&self, entry: &JournalEntry) -> Result<(), AppError> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -243,12 +246,18 @@ impl JournalRepository for PgJournalRepository {
             .map_err(|e| AppError::Internal(e.into()))?;
         }
 
-        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
 
     async fn update(&self, entry: &JournalEntry) -> Result<(), AppError> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -308,12 +317,18 @@ impl JournalRepository for PgJournalRepository {
             .map_err(|e| AppError::Internal(e.into()))?;
         }
 
-        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), AppError> {
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -337,7 +352,9 @@ impl JournalRepository for PgJournalRepository {
         .await
         .map_err(|e| AppError::Internal(e.into()))?;
 
-        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        tx.commit()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
 
@@ -372,13 +389,11 @@ impl JournalRepository for PgJournalRepository {
     }
 
     async fn count_by_company(&self, company_id: Uuid) -> Result<i64, AppError> {
-        let row = sqlx::query(
-            "SELECT COUNT(*) FROM journal_entries WHERE company_id = $1"
-        )
-        .bind(company_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.into()))?;
+        let row = sqlx::query("SELECT COUNT(*) FROM journal_entries WHERE company_id = $1")
+            .bind(company_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
 
         let count: i64 = row.get(0);
         Ok(count)

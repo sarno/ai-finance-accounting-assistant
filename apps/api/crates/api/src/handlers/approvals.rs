@@ -5,8 +5,8 @@ use axum::{
 use std::sync::Arc;
 use uuid::Uuid;
 
-use finance_assistant_app::dto::approval::{ApprovalResponse, ApproveRequest, RejectRequest};
 use crate::{errors::*, middleware::auth_middleware::AuthenticatedUser, state::AppState};
+use finance_assistant_app::dto::approval::{ApprovalResponse, ApproveRequest, RejectRequest};
 
 /// GET /api/approvals
 /// List pending approval requests for the company.
@@ -14,10 +14,7 @@ pub async fn list_pending_approvals(
     State(state): State<Arc<AppState>>,
     AuthenticatedUser(user): AuthenticatedUser,
 ) -> Result<Json<Vec<ApprovalResponse>>, ApiError> {
-    let response = state
-        .approval_service
-        .list_pending(user.company_id)
-        .await?;
+    let response = state.approval_service.list_pending(user.company_id).await?;
 
     Ok(Json(response))
 }

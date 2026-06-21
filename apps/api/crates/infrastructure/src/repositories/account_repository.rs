@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use finance_assistant_app::{
-    errors::AppError,
-    ports::account_repository::AccountRepository,
-};
+use finance_assistant_app::{errors::AppError, ports::account_repository::AccountRepository};
 use finance_assistant_domain::{
     entities::account::Account,
     value_objects::{AccountCode, AccountType},
@@ -38,10 +35,12 @@ impl AccountRepository for PgAccountRepository {
 
         let row = match row {
             Some(r) => r,
-            None => return Err(AppError::NotFound {
-                resource: "Account".to_string(),
-                id: id.to_string(),
-            }),
+            None => {
+                return Err(AppError::NotFound {
+                    resource: "Account".to_string(),
+                    id: id.to_string(),
+                })
+            }
         };
 
         let type_str: String = row.get("account_type");
@@ -67,7 +66,11 @@ impl AccountRepository for PgAccountRepository {
         })
     }
 
-    async fn find_by_code(&self, company_id: Uuid, code: &AccountCode) -> Result<Option<Account>, AppError> {
+    async fn find_by_code(
+        &self,
+        company_id: Uuid,
+        code: &AccountCode,
+    ) -> Result<Option<Account>, AppError> {
         let row = sqlx::query(
             r#"
             SELECT id, company_id, code, name, account_type, parent_id, is_active, created_at, updated_at

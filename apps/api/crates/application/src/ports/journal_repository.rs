@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use finance_assistant_domain::entities::journal::{JournalEntry, JournalLine};
 use crate::errors::AppError;
+use finance_assistant_domain::entities::journal::{JournalEntry, JournalLine};
 
 #[async_trait]
 pub trait JournalRepository: Send + Sync {

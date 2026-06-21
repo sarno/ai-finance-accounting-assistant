@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use finance_assistant_domain::entities::user::User;
 use crate::errors::AppError;
+use finance_assistant_domain::entities::user::User;
 
 #[async_trait]
 pub trait UserRepository: Send + Sync {

@@ -4,40 +4,30 @@ use dotenvy::dotenv;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod config;
-mod router;
-mod middleware;
-mod handlers;
-mod state;
 mod errors;
+mod handlers;
+mod middleware;
+mod router;
+mod state;
 
 use config::AppConfig;
+use finance_assistant_app::services::{
+    approval_service::ApprovalService, auth_service::AuthService, invoice_service::InvoiceService,
+    item_service::ItemService, journal_service::JournalService,
+    master_data_service::MasterDataService,
+};
 use finance_assistant_infra::{
     db,
     repositories::{
-        journal_repository::PgJournalRepository,
+        account_repository::PgAccountRepository, approval_repository::PgApprovalRepository,
         audit_log_repository::PgAuditLogRepository,
-        user_repository::PgUserRepository,
-        company_repository::PgCompanyRepository,
-        branch_repository::PgBranchRepository,
-        account_repository::PgAccountRepository,
-        customer_repository::PgCustomerRepository,
-        supplier_repository::PgSupplierRepository,
-        bank_account_repository::PgBankAccountRepository,
-        tax_repository::PgTaxRepository,
-        approval_repository::PgApprovalRepository,
-        invoice_repository::PgInvoiceRepository,
-        item_repository::PgItemRepository,
+        bank_account_repository::PgBankAccountRepository, branch_repository::PgBranchRepository,
+        company_repository::PgCompanyRepository, customer_repository::PgCustomerRepository,
+        invoice_repository::PgInvoiceRepository, item_repository::PgItemRepository,
+        journal_repository::PgJournalRepository, supplier_repository::PgSupplierRepository,
+        tax_repository::PgTaxRepository, user_repository::PgUserRepository,
     },
 };
-use finance_assistant_app::services::{
-    journal_service::JournalService,
-    auth_service::AuthService,
-    master_data_service::MasterDataService,
-    approval_service::ApprovalService,
-    invoice_service::InvoiceService,
-    item_service::ItemService,
-};
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -61,21 +51,24 @@ async fn main() -> anyhow::Result<()> {
 
     // ─── Build application state (dependency injection) ───────────────────────
     let journal_repo = Arc::new(PgJournalRepository::new(pool.clone()));
-    let audit_repo   = Arc::new(PgAuditLogRepository::new(pool.clone()));
-    let user_repo    = Arc::new(PgUserRepository::new(pool.clone()));
+    let audit_repo = Arc::new(PgAuditLogRepository::new(pool.clone()));
+    let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
     let company_repo = Arc::new(PgCompanyRepository::new(pool.clone()));
     let branch_repo = Arc::new(PgBranchRepository::new(pool.clone()));
     let account_repo = Arc::new(PgAccountRepository::new(pool.clone()));
     let customer_repo = Arc::new(PgCustomerRepository::new(pool.clone()));
     let supplier_repo = Arc::new(PgSupplierRepository::new(pool.clone()));
     let bank_account_repo = Arc::new(PgBankAccountRepository::new(pool.clone()));
-    let tax_repo     = Arc::new(PgTaxRepository::new(pool.clone()));
+    let tax_repo = Arc::new(PgTaxRepository::new(pool.clone()));
     let approval_repo = Arc::new(PgApprovalRepository::new(pool.clone()));
     let invoice_repo = Arc::new(PgInvoiceRepository::new(pool.clone()));
     let item_repo = Arc::new(PgItemRepository::new(pool.clone()));
 
-    let journal_svc  = Arc::new(JournalService::new(journal_repo.clone(), audit_repo.clone()));
-    let auth_svc     = Arc::new(AuthService::new(
+    let journal_svc = Arc::new(JournalService::new(
+        journal_repo.clone(),
+        audit_repo.clone(),
+    ));
+    let auth_svc = Arc::new(AuthService::new(
         user_repo.clone(),
         cfg.jwt_secret.clone(),
         cfg.jwt_access_minutes,
@@ -92,6 +85,7 @@ async fn main() -> anyhow::Result<()> {
     ));
     let invoice_svc = Arc::new(InvoiceService::new(
         invoice_repo.clone(),
+        item_repo.clone(),
         tax_repo.clone(),
         journal_repo.clone(),
     ));
@@ -116,7 +110,6 @@ async fn main() -> anyhow::Result<()> {
         invoice_service: invoice_svc,
         item_service: item_svc,
     };
-
 
     // ─── Build Axum router ────────────────────────────────────────────────────
     let app = router::build(app_state);

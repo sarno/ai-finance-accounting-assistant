@@ -1,5 +1,5 @@
-use thiserror::Error;
 use finance_assistant_domain::errors::DomainError;
+use thiserror::Error;
 
 /// Application-level errors (wraps domain + infra errors).
 #[derive(Debug, Error)]

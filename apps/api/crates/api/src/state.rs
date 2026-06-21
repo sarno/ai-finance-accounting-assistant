@@ -1,13 +1,10 @@
-use std::sync::Arc;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 use finance_assistant_app::services::{
-    journal_service::JournalService,
-    auth_service::AuthService,
+    approval_service::ApprovalService, auth_service::AuthService, invoice_service::InvoiceService,
+    item_service::ItemService, journal_service::JournalService,
     master_data_service::MasterDataService,
-    approval_service::ApprovalService,
-    invoice_service::InvoiceService,
-    item_service::ItemService,
 };
 
 use crate::config::AppConfig;
@@ -24,4 +21,3 @@ pub struct AppState {
     pub invoice_service: Arc<InvoiceService>,
     pub item_service: Arc<ItemService>,
 }
-

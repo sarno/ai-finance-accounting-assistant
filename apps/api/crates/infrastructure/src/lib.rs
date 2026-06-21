@@ -6,7 +6,7 @@
 //!   - OpenAI/OCR client implementation
 //!   - Database connection pool management
 
+pub mod ai_client;
 pub mod db;
 pub mod repositories;
 pub mod storage;
-pub mod ai_client;

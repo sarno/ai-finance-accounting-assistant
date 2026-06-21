@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use finance_assistant_domain::entities::tax::TaxType;
 use crate::errors::AppError;
+use finance_assistant_domain::entities::tax::TaxType;
 
 #[async_trait]
 pub trait TaxRepository: Send + Sync {

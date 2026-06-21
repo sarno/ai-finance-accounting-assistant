@@ -49,7 +49,11 @@ impl AuditLogRepository for PgAuditLogRepository {
         Ok(())
     }
 
-    async fn find_by_entity(&self, _entity_type: &str, _entity_id: Uuid) -> Result<Vec<AuditLog>, AppError> {
+    async fn find_by_entity(
+        &self,
+        _entity_type: &str,
+        _entity_id: Uuid,
+    ) -> Result<Vec<AuditLog>, AppError> {
         Ok(vec![])
     }
 }

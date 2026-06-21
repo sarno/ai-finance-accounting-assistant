@@ -1,12 +1,8 @@
+use crate::{dto::item::*, errors::AppError, ports::item_repository::ItemRepository};
+use finance_assistant_domain::entities::item::{Item, ItemCategory};
 use std::sync::Arc;
-use uuid::Uuid;
 use time::OffsetDateTime;
-use finance_assistant_domain::entities::item::{ItemCategory, Item};
-use crate::{
-    dto::item::*,
-    errors::AppError,
-    ports::item_repository::ItemRepository,
-};
+use uuid::Uuid;
 
 pub struct ItemService {
     item_repo: Arc<dyn ItemRepository>,
@@ -19,7 +15,10 @@ impl ItemService {
 
     // ─── Item Categories ─────────────────────────────────────────────────────
 
-    pub async fn create_category(&self, req: CreateItemCategoryRequest) -> Result<ItemCategoryResponse, AppError> {
+    pub async fn create_category(
+        &self,
+        req: CreateItemCategoryRequest,
+    ) -> Result<ItemCategoryResponse, AppError> {
         let now = OffsetDateTime::now_utc();
         let category = ItemCategory {
             id: Uuid::new_v4(),
@@ -40,7 +39,11 @@ impl ItemService {
         Ok(ItemCategoryResponse::from(category))
     }
 
-    pub async fn update_category(&self, id: Uuid, req: UpdateItemCategoryRequest) -> Result<ItemCategoryResponse, AppError> {
+    pub async fn update_category(
+        &self,
+        id: Uuid,
+        req: UpdateItemCategoryRequest,
+    ) -> Result<ItemCategoryResponse, AppError> {
         let mut category = self.item_repo.find_category_by_id(id).await?;
         category.name = req.name;
         category.description = req.description;
@@ -56,9 +59,18 @@ impl ItemService {
         Ok(())
     }
 
-    pub async fn list_categories(&self, company_id: Uuid) -> Result<Vec<ItemCategoryResponse>, AppError> {
-        let categories = self.item_repo.find_categories_by_company(company_id).await?;
-        Ok(categories.into_iter().map(ItemCategoryResponse::from).collect())
+    pub async fn list_categories(
+        &self,
+        company_id: Uuid,
+    ) -> Result<Vec<ItemCategoryResponse>, AppError> {
+        let categories = self
+            .item_repo
+            .find_categories_by_company(company_id)
+            .await?;
+        Ok(categories
+            .into_iter()
+            .map(ItemCategoryResponse::from)
+            .collect())
     }
 
     // ─── Items ───────────────────────────────────────────────────────────────
@@ -90,7 +102,11 @@ impl ItemService {
         Ok(ItemResponse::from(item))
     }
 
-    pub async fn update_item(&self, id: Uuid, req: UpdateItemRequest) -> Result<ItemResponse, AppError> {
+    pub async fn update_item(
+        &self,
+        id: Uuid,
+        req: UpdateItemRequest,
+    ) -> Result<ItemResponse, AppError> {
         let mut item = self.item_repo.find_item_by_id(id).await?;
         item.category_id = req.category_id;
         item.code = req.code;

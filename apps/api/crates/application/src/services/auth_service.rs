@@ -1,18 +1,20 @@
-use std::sync::Arc;
-use uuid::Uuid;
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use jsonwebtoken::{encode, Header, EncodingKey};
-use serde::{Serialize, Deserialize};
+use jsonwebtoken::{encode, EncodingKey, Header};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use uuid::Uuid;
 
-use finance_assistant_domain::entities::user::User;
 use crate::{
-    dto::auth::{LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse, UserSummary},
+    dto::auth::{
+        LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse, UserSummary,
+    },
     errors::AppError,
     ports::user_repository::UserRepository,
 };
+use finance_assistant_domain::entities::user::User;
 
 pub struct AuthService {
     user_repo: Arc<dyn UserRepository>,
@@ -60,9 +62,11 @@ impl AuthService {
         let user = self.user_repo.find_by_email(&req.email).await?;
         let mut user = match user {
             Some(u) => u,
-            None => return Err(AppError::Unauthorized {
-                reason: "Invalid email or password".to_string(),
-            }),
+            None => {
+                return Err(AppError::Unauthorized {
+                    reason: "Invalid email or password".to_string(),
+                })
+            }
         };
 
         if !user.is_active {
@@ -72,9 +76,10 @@ impl AuthService {
         }
 
         // Verify password
-        let parsed_hash = PasswordHash::new(&user.password_hash)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Invalid password hash format: {}", e)))?;
-        
+        let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Invalid password hash format: {}", e))
+        })?;
+
         Argon2::default()
             .verify_password(req.password.as_bytes(), &parsed_hash)
             .map_err(|_| AppError::Unauthorized {
@@ -87,7 +92,8 @@ impl AuthService {
 
         // Generate tokens
         let access_token = self.generate_token(&user, "access", self.jwt_access_minutes)?;
-        let refresh_token = self.generate_token(&user, "refresh", self.jwt_refresh_days * 24 * 60)?;
+        let refresh_token =
+            self.generate_token(&user, "refresh", self.jwt_refresh_days * 24 * 60)?;
 
         Ok(LoginResponse {
             access_token,
@@ -103,7 +109,10 @@ impl AuthService {
     }
 
     /// Refresh access and refresh tokens using a valid refresh token.
-    pub async fn refresh(&self, req: RefreshTokenRequest) -> Result<RefreshTokenResponse, AppError> {
+    pub async fn refresh(
+        &self,
+        req: RefreshTokenRequest,
+    ) -> Result<RefreshTokenResponse, AppError> {
         // Decode token
         let token_data = jsonwebtoken::decode::<Claims>(
             &req.refresh_token,
@@ -134,7 +143,8 @@ impl AuthService {
 
         // Generate new tokens
         let access_token = self.generate_token(&user, "access", self.jwt_access_minutes)?;
-        let refresh_token = self.generate_token(&user, "refresh", self.jwt_refresh_days * 24 * 60)?;
+        let refresh_token =
+            self.generate_token(&user, "refresh", self.jwt_refresh_days * 24 * 60)?;
 
         Ok(RefreshTokenResponse {
             access_token,
@@ -142,7 +152,12 @@ impl AuthService {
         })
     }
 
-    fn generate_token(&self, user: &User, token_type: &str, duration_minutes: i64) -> Result<String, AppError> {
+    fn generate_token(
+        &self,
+        user: &User,
+        token_type: &str,
+        duration_minutes: i64,
+    ) -> Result<String, AppError> {
         let iat = time::OffsetDateTime::now_utc().unix_timestamp();
         let exp = iat + (duration_minutes * 60);
 
