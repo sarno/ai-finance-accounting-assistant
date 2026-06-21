@@ -67,6 +67,22 @@ pub fn build(state: AppState) -> Router {
             "/api/sales-invoices/:id/submit",
             post(invoices::submit_approval),
         )
+        // Purchase Invoices
+        .route("/api/purchase-invoices", get(invoices::list_purchase_invoices))
+        .route(
+            "/api/purchase-invoices/draft",
+            post(invoices::create_purchase_draft),
+        )
+        .route(
+            "/api/purchase-invoices/:id",
+            get(invoices::get_purchase_invoice)
+                .put(invoices::update_purchase_invoice)
+                .delete(invoices::delete_purchase_invoice),
+        )
+        .route(
+            "/api/purchase-invoices/:id/submit",
+            post(invoices::submit_purchase_approval),
+        )
         // Reports
         .route("/api/reports/cash-position", get(reports::cash_position))
         .route("/api/reports/profit-loss", get(reports::profit_loss))

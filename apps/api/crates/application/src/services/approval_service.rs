@@ -69,6 +69,12 @@ impl ApprovalService {
                     Err(_) => None,
                 }
             }
+            ApprovalDocumentType::PurchaseInvoice => {
+                match self.invoice_repo.find_purchase_by_id(r.document_id).await {
+                    Ok(invoice) => Some(invoice.internal_reference),
+                    Err(_) => None,
+                }
+            }
             _ => None,
         };
 
@@ -207,6 +213,63 @@ impl ApprovalService {
         Ok(self.enrich_response(request).await)
     }
 
+    /// Submit a purchase invoice for approval.
+    #[instrument(skip(self))]
+    pub async fn submit_purchase_invoice_approval(
+        &self,
+        invoice_id: Uuid,
+        requested_by: Uuid,
+    ) -> Result<ApprovalResponse, AppError> {
+        let mut invoice = self.invoice_repo.find_purchase_by_id(invoice_id).await?;
+
+        if invoice.status != DocumentStatus::Draft && invoice.status != DocumentStatus::Rejected {
+            return Err(AppError::Validation {
+                message: "Only draft or rejected invoices can be submitted for approval"
+                    .to_string(),
+            });
+        }
+
+        invoice.status = DocumentStatus::WaitingApproval;
+        invoice.updated_at = time::OffsetDateTime::now_utc();
+        self.invoice_repo.update_purchase(&invoice).await?;
+
+        let now = time::OffsetDateTime::now_utc();
+        let existing = self.approval_repo.find_by_document(invoice_id).await?;
+
+        let request = match existing {
+            Some(mut req) => {
+                req.status = ApprovalStatus::Pending;
+                req.requested_by = requested_by;
+                req.comment = None;
+                req.reviewed_by = None;
+                req.reviewed_at = None;
+                req.updated_at = now;
+                self.approval_repo.update(&req).await?;
+                req
+            }
+            None => {
+                let req = ApprovalRequest {
+                    id: Uuid::new_v4(),
+                    company_id: invoice.company_id,
+                    document_type: ApprovalDocumentType::PurchaseInvoice,
+                    document_id: invoice_id,
+                    status: ApprovalStatus::Pending,
+                    requested_by,
+                    reviewed_by: None,
+                    reviewed_at: None,
+                    comment: None,
+                    created_at: now,
+                    updated_at: now,
+                };
+                self.approval_repo.save(&req).await?;
+                req
+            }
+        };
+
+        tracing::info!(invoice_id = %invoice_id, approval_id = %request.id, "Purchase invoice submitted for approval");
+        Ok(self.enrich_response(request).await)
+    }
+
     /// Approve an approval request.
     #[instrument(skip(self))]
     pub async fn approve_request(
@@ -336,6 +399,102 @@ impl ApprovalService {
                 invoice.updated_at = now;
                 self.invoice_repo.update_sales(&invoice).await?;
             }
+            ApprovalDocumentType::PurchaseInvoice => {
+                let mut invoice = self.invoice_repo.find_purchase_by_id(req.document_id).await?;
+                if invoice.status != DocumentStatus::WaitingApproval {
+                    return Err(AppError::Validation {
+                        message: "Only waiting approval invoices can be approved".to_string(),
+                    });
+                }
+
+                let ap_code =
+                    finance_assistant_domain::value_objects::AccountCode("2100".to_string());
+                let ap_account = self
+                    .account_repo
+                    .find_by_code(invoice.company_id, &ap_code)
+                    .await?
+                    .ok_or_else(|| AppError::Validation {
+                        message: "Accounts Payable account (2100) not found".to_string(),
+                    })?;
+
+                let journal_id = Uuid::new_v4();
+                let mut journal_lines = Vec::new();
+                let mut sort_order = 0;
+
+                for line in &invoice.lines {
+                    journal_lines.push(finance_assistant_domain::entities::journal::JournalLine {
+                        id: Uuid::new_v4(),
+                        journal_entry_id: journal_id,
+                        account_id: line.account_id,
+                        debit: line.net_amount(),
+                        credit: Decimal::ZERO,
+                        description: Some(line.description.clone()),
+                        sort_order,
+                    });
+                    sort_order += 1;
+
+                    if line.tax_amount > Decimal::ZERO {
+                        let tax_id = line.tax_type_id.ok_or_else(|| AppError::Validation {
+                            message: "Missing tax type configuration for tax amount".to_string(),
+                        })?;
+                        let tax_config = self.tax_repo.find_by_id(tax_id).await?;
+                        journal_lines.push(
+                            finance_assistant_domain::entities::journal::JournalLine {
+                                id: Uuid::new_v4(),
+                                journal_entry_id: journal_id,
+                                account_id: tax_config.payable_account_id,
+                                debit: line.tax_amount,
+                                credit: Decimal::ZERO,
+                                description: Some(format!("Tax for: {}", line.description)),
+                                sort_order,
+                            },
+                        );
+                        sort_order += 1;
+                    }
+                }
+
+                journal_lines.push(finance_assistant_domain::entities::journal::JournalLine {
+                    id: Uuid::new_v4(),
+                    journal_entry_id: journal_id,
+                    account_id: ap_account.id,
+                    debit: Decimal::ZERO,
+                    credit: invoice.total_amount,
+                    description: Some(format!(
+                        "Payable for purchase invoice {}",
+                        invoice.supplier_invoice_number
+                    )),
+                    sort_order,
+                });
+
+                let journal_entry = finance_assistant_domain::entities::journal::JournalEntry {
+                    id: journal_id,
+                    company_id: invoice.company_id,
+                    branch_id: invoice.branch_id,
+                    reference_number: invoice.internal_reference.clone(),
+                    description: format!(
+                        "Auto-posting purchase invoice {}",
+                        invoice.supplier_invoice_number
+                    ),
+                    transaction_date: invoice.invoice_date,
+                    lines: journal_lines,
+                    status: DocumentStatus::Posted,
+                    source:
+                        finance_assistant_domain::entities::journal::JournalSource::PurchaseInvoice,
+                    source_document_id: Some(invoice.id),
+                    created_by: invoice.created_by,
+                    posted_by: Some(reviewed_by),
+                    posted_at: Some(now),
+                    created_at: now,
+                    updated_at: now,
+                };
+
+                self.journal_repo.save(&journal_entry).await?;
+
+                invoice.status = DocumentStatus::Posted;
+                invoice.journal_entry_id = Some(journal_id);
+                invoice.updated_at = now;
+                self.invoice_repo.update_purchase(&invoice).await?;
+            }
             _ => {
                 // Other document types will be implemented as tasks progress
             }
@@ -382,6 +541,12 @@ impl ApprovalService {
                 invoice.status = DocumentStatus::Rejected;
                 invoice.updated_at = now;
                 self.invoice_repo.update_sales(&invoice).await?;
+            }
+            ApprovalDocumentType::PurchaseInvoice => {
+                let mut invoice = self.invoice_repo.find_purchase_by_id(req.document_id).await?;
+                invoice.status = DocumentStatus::Rejected;
+                invoice.updated_at = now;
+                self.invoice_repo.update_purchase(&invoice).await?;
             }
             _ => {
                 // Other document types will be implemented as tasks progress
@@ -558,6 +723,7 @@ mod tests {
 
     struct MockInvoiceRepository {
         sales: Mutex<Option<SalesInvoice>>,
+        purchase: Mutex<Option<PurchaseInvoice>>,
     }
 
     #[async_trait::async_trait]
@@ -596,16 +762,36 @@ mod tests {
         async fn delete_sales(&self, _id: Uuid) -> Result<(), AppError> {
             Ok(())
         }
-        async fn find_purchase_by_id(&self, _id: Uuid) -> Result<PurchaseInvoice, AppError> {
-            Err(AppError::NotFound {
-                resource: "PurchaseInvoice".to_string(),
-                id: _id.to_string(),
-            })
+        async fn find_purchase_by_company(
+            &self,
+            _company_id: Uuid,
+            _page: u32,
+            _per_page: u32,
+        ) -> Result<Vec<PurchaseInvoice>, AppError> {
+            Ok(vec![])
         }
-        async fn save_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
-            Ok(())
+        async fn count_purchase_by_company(&self, _company_id: Uuid) -> Result<u64, AppError> {
+            Ok(0)
+        }
+        async fn find_purchase_by_id(&self, _id: Uuid) -> Result<PurchaseInvoice, AppError> {
+            self.purchase
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| AppError::NotFound {
+                    resource: "PurchaseInvoice".to_string(),
+                    id: _id.to_string(),
+                })
+        }
+        async fn save_purchase(&self, invoice: &PurchaseInvoice) -> Result<PurchaseInvoice, AppError> {
+            *self.purchase.lock().unwrap() = Some(invoice.clone());
+            Ok(invoice.clone())
         }
         async fn update_purchase(&self, _invoice: &PurchaseInvoice) -> Result<(), AppError> {
+            *self.purchase.lock().unwrap() = Some(_invoice.clone());
+            Ok(())
+        }
+        async fn delete_purchase(&self, _id: Uuid) -> Result<(), AppError> {
             Ok(())
         }
         async fn find_duplicate_purchase(
@@ -707,6 +893,7 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository);
         let invoice_repo = Arc::new(MockInvoiceRepository {
             sales: Mutex::new(None),
+            purchase: Mutex::new(None),
         });
         let account_repo = Arc::new(MockAccountRepository);
         let tax_repo = Arc::new(MockTaxRepository);
@@ -800,5 +987,103 @@ mod tests {
         // Line 2: debit Accounts Receivable
         assert_eq!(journal.lines[2].debit, Decimal::from(110));
         assert_eq!(journal.lines[2].credit, Decimal::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_submit_and_approve_purchase_invoice() {
+        let approval_repo = Arc::new(MockApprovalRepository {
+            request: Mutex::new(None),
+        });
+        let journal_repo = Arc::new(MockJournalRepository {
+            entry: Mutex::new(None),
+        });
+        let audit_repo = Arc::new(MockAuditLogRepository);
+        let user_repo = Arc::new(MockUserRepository);
+        let invoice_repo = Arc::new(MockInvoiceRepository {
+            sales: Mutex::new(None),
+            purchase: Mutex::new(None),
+        });
+        let account_repo = Arc::new(MockAccountRepository);
+        let tax_repo = Arc::new(MockTaxRepository);
+
+        let service = ApprovalService::new(
+            approval_repo.clone(),
+            journal_repo.clone(),
+            audit_repo,
+            user_repo,
+            invoice_repo.clone(),
+            account_repo,
+            tax_repo,
+        );
+
+        let company_id = Uuid::new_v4();
+        let supplier_id = Uuid::new_v4();
+        let invoice_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let tax_id = Uuid::new_v4();
+        let expense_account_id = Uuid::new_v4();
+
+        let draft_invoice = PurchaseInvoice {
+            id: invoice_id,
+            company_id,
+            branch_id: None,
+            supplier_invoice_number: "SUP-100".to_string(),
+            internal_reference: "PI/2026/0001".to_string(),
+            supplier_id,
+            invoice_date: time::Date::from_calendar_date(2026, time::Month::June, 21).unwrap(),
+            due_date: time::Date::from_calendar_date(2026, time::Month::July, 21).unwrap(),
+            lines: vec![InvoiceLine {
+                id: Uuid::new_v4(),
+                item_id: None,
+                description: "Expense line".to_string(),
+                quantity: Decimal::from(2),
+                unit_price: Decimal::from(100),
+                discount_amount: Decimal::from(20),
+                tax_type_id: Some(tax_id),
+                tax_rate: Some(Decimal::from_str("0.10").unwrap()),
+                tax_amount: Decimal::from(18),
+                line_total: Decimal::from(198),
+                account_id: expense_account_id,
+                sort_order: 1,
+            }],
+            subtotal: Decimal::from(180),
+            tax_amount: Decimal::from(18),
+            total_amount: Decimal::from(198),
+            status: DocumentStatus::Draft,
+            ai_confidence: None,
+            uploaded_document_id: None,
+            journal_entry_id: None,
+            notes: None,
+            created_by: user_id,
+            created_at: OffsetDateTime::now_utc(),
+            updated_at: OffsetDateTime::now_utc(),
+        };
+        *invoice_repo.purchase.lock().unwrap() = Some(draft_invoice);
+
+        let submit_res = service
+            .submit_purchase_invoice_approval(invoice_id, user_id)
+            .await
+            .unwrap();
+        assert_eq!(submit_res.status, "pending");
+
+        let updated_inv = invoice_repo.purchase.lock().unwrap().clone().unwrap();
+        assert_eq!(updated_inv.status, DocumentStatus::WaitingApproval);
+
+        let approve_res = service
+            .approve_request(submit_res.id, user_id, Some("Approved".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(approve_res.status, "approved");
+
+        let posted_inv = invoice_repo.purchase.lock().unwrap().clone().unwrap();
+        assert_eq!(posted_inv.status, DocumentStatus::Posted);
+        assert!(posted_inv.journal_entry_id.is_some());
+
+        let journal = journal_repo.entry.lock().unwrap().clone().unwrap();
+        assert_eq!(journal.status, DocumentStatus::Posted);
+        assert_eq!(journal.lines.len(), 3);
+        assert_eq!(journal.lines[0].debit, Decimal::from(180));
+        assert_eq!(journal.lines[1].debit, Decimal::from(18));
+        assert_eq!(journal.lines[2].credit, Decimal::from(198));
     }
 }

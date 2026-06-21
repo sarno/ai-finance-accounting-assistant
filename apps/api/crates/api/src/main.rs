@@ -79,13 +79,15 @@ async fn main() -> anyhow::Result<()> {
         branch_repo,
         account_repo.clone(),
         customer_repo,
-        supplier_repo,
+        supplier_repo.clone(),
         bank_account_repo,
         tax_repo.clone(),
     ));
     let invoice_svc = Arc::new(InvoiceService::new(
         invoice_repo.clone(),
         item_repo.clone(),
+        supplier_repo.clone(),
+        account_repo.clone(),
         tax_repo.clone(),
         journal_repo.clone(),
     ));

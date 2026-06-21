@@ -2,7 +2,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use finance_assistant_domain::entities::invoice::{InvoiceLine, SalesInvoice};
+use finance_assistant_domain::entities::invoice::{InvoiceLine, PurchaseInvoice, SalesInvoice};
 
 // ─── Request ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +34,35 @@ pub struct CreateInvoiceLineRequest {
     pub sort_order: i32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePurchaseInvoiceRequest {
+    pub company_id: Uuid,
+    pub branch_id: Option<Uuid>,
+    pub supplier_invoice_number: String,
+    pub internal_reference: String,
+    pub supplier_id: Uuid,
+    #[serde(with = "crate::dto::date_format")]
+    pub invoice_date: time::Date,
+    #[serde(with = "crate::dto::date_format")]
+    pub due_date: time::Date,
+    pub lines: Vec<CreatePurchaseInvoiceLineRequest>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePurchaseInvoiceLineRequest {
+    pub item_id: Option<Uuid>,
+    pub description: String,
+    pub quantity: Decimal,
+    pub unit_price: Decimal,
+    pub discount_amount: Option<Decimal>,
+    pub tax_type_id: Option<Uuid>,
+    pub account_id: Uuid,
+    pub sort_order: i32,
+}
+
 // ─── Response ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
@@ -44,6 +73,33 @@ pub struct SalesInvoiceResponse {
     pub branch_id: Option<Uuid>,
     pub invoice_number: String,
     pub customer_id: Uuid,
+    #[serde(with = "crate::dto::date_format")]
+    pub invoice_date: time::Date,
+    #[serde(with = "crate::dto::date_format")]
+    pub due_date: time::Date,
+    pub lines: Vec<InvoiceLineResponse>,
+    pub subtotal: Decimal,
+    pub tax_amount: Decimal,
+    pub total_amount: Decimal,
+    pub status: String,
+    pub notes: Option<String>,
+    pub journal_entry_id: Option<Uuid>,
+    pub created_by: Uuid,
+    #[serde(with = "crate::dto::datetime_format")]
+    pub created_at: time::OffsetDateTime,
+    #[serde(with = "crate::dto::datetime_format")]
+    pub updated_at: time::OffsetDateTime,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurchaseInvoiceResponse {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub branch_id: Option<Uuid>,
+    pub supplier_invoice_number: String,
+    pub internal_reference: String,
+    pub supplier_id: Uuid,
     #[serde(with = "crate::dto::date_format")]
     pub invoice_date: time::Date,
     #[serde(with = "crate::dto::date_format")]
@@ -103,6 +159,35 @@ impl From<SalesInvoice> for SalesInvoiceResponse {
             created_by: si.created_by,
             created_at: si.created_at,
             updated_at: si.updated_at,
+        }
+    }
+}
+
+impl From<PurchaseInvoice> for PurchaseInvoiceResponse {
+    fn from(pi: PurchaseInvoice) -> Self {
+        Self {
+            id: pi.id,
+            company_id: pi.company_id,
+            branch_id: pi.branch_id,
+            supplier_invoice_number: pi.supplier_invoice_number,
+            internal_reference: pi.internal_reference,
+            supplier_id: pi.supplier_id,
+            invoice_date: pi.invoice_date,
+            due_date: pi.due_date,
+            lines: pi
+                .lines
+                .into_iter()
+                .map(InvoiceLineResponse::from)
+                .collect(),
+            subtotal: pi.subtotal,
+            tax_amount: pi.tax_amount,
+            total_amount: pi.total_amount,
+            status: pi.status.to_string(),
+            notes: pi.notes,
+            journal_entry_id: pi.journal_entry_id,
+            created_by: pi.created_by,
+            created_at: pi.created_at,
+            updated_at: pi.updated_at,
         }
     }
 }

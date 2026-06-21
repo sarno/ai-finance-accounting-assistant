@@ -24,8 +24,16 @@ pub trait InvoiceRepository: Send + Sync {
     async fn update_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError>;
     async fn delete_sales(&self, id: Uuid) -> Result<(), AppError>;
     async fn find_purchase_by_id(&self, id: Uuid) -> Result<PurchaseInvoice, AppError>;
-    async fn save_purchase(&self, invoice: &PurchaseInvoice) -> Result<(), AppError>;
+    async fn find_purchase_by_company(
+        &self,
+        company_id: Uuid,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<PurchaseInvoice>, AppError>;
+    async fn count_purchase_by_company(&self, company_id: Uuid) -> Result<u64, AppError>;
+    async fn save_purchase(&self, invoice: &PurchaseInvoice) -> Result<PurchaseInvoice, AppError>;
     async fn update_purchase(&self, invoice: &PurchaseInvoice) -> Result<(), AppError>;
+    async fn delete_purchase(&self, id: Uuid) -> Result<(), AppError>;
     async fn find_duplicate_purchase(
         &self,
         company_id: Uuid,
