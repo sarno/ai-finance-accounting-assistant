@@ -8,6 +8,7 @@ pub mod payment;
 pub mod report;
 pub mod approval;
 pub mod master_data;
+pub mod item;
 
 pub mod date_format {
     use serde::{Serializer, Deserializer, Deserialize};

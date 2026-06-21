@@ -7,6 +7,7 @@ use finance_assistant_app::services::{
     master_data_service::MasterDataService,
     approval_service::ApprovalService,
     invoice_service::InvoiceService,
+    item_service::ItemService,
 };
 
 use crate::config::AppConfig;
@@ -21,5 +22,6 @@ pub struct AppState {
     pub master_data_service: Arc<MasterDataService>,
     pub approval_service: Arc<ApprovalService>,
     pub invoice_service: Arc<InvoiceService>,
+    pub item_service: Arc<ItemService>,
 }
 

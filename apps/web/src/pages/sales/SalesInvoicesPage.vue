@@ -192,14 +192,34 @@
                 <label class="form-label">Invoice Number *</label>
                 <input v-model="form.invoiceNumber" type="text" class="form-input" placeholder="INV/2026/001" required />
               </div>
-              <div class="form-group">
+              <div class="form-group custom-select-search-container" ref="customerDropdownRef">
                 <label class="form-label">Customer *</label>
-                <select v-model="form.customerId" class="form-select" required>
-                  <option value="">Select Customer</option>
-                  <option v-for="c in customers" :key="c.id" :value="c.id">
-                    {{ c.name }}
-                  </option>
-                </select>
+                <div class="custom-select-search-wrapper">
+                  <input
+                    type="text"
+                    class="form-input"
+                    placeholder="Search and select customer..."
+                    v-model="customerSearchTerm"
+                    @focus="isCustomerDropdownOpen = true"
+                    required
+                  />
+                  <span class="custom-select-arrow" @click="toggleCustomerDropdown">▼</span>
+
+                  <div v-show="isCustomerDropdownOpen" class="custom-select-dropdown">
+                    <div
+                      v-for="c in filteredFormCustomers"
+                      :key="c.id"
+                      class="custom-select-option"
+                      @click="selectFormCustomer(c)"
+                    >
+                      {{ c.name }}
+                    </div>
+                    <div v-if="filteredFormCustomers.length === 0" class="custom-select-no-results">
+                      No customers found
+                    </div>
+                  </div>
+                </div>
+                <input type="hidden" :value="form.customerId" required name="customerId" />
               </div>
             </div>
 
@@ -443,9 +463,9 @@ import MainLayout from '@/components/MainLayout.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useInvoiceStore } from '@/stores/invoice.store'
 import { useAuthStore } from '@/stores/auth.store'
-import { customerApi, taxTypeApi, branchApi, accountApi } from '@/api/master-data.api'
+import { customerApi, taxTypeApi, branchApi, accountApi, itemApi } from '@/api/master-data.api'
 import type { SalesInvoice } from '@/types/invoice.types'
-import type { Customer, TaxType, Branch, Account } from '@/types/master-data.types'
+import type { Customer, TaxType, Branch, Account, Item } from '@/types/master-data.types'
 
 const invoiceStore = useInvoiceStore()
 const authStore = useAuthStore()
@@ -455,6 +475,7 @@ const customers = ref<Customer[]>([])
 const taxTypes = ref<TaxType[]>([])
 const branches = ref<Branch[]>([])
 const accounts = ref<Account[]>([])
+const items = ref<Item[]>([])
 
 // Notification messages
 const successMsg = ref<string | null>(null)
@@ -468,6 +489,30 @@ const selectedInvoice = ref<SalesInvoice | null>(null)
 // Search, filtering, and paging
 const searchTerm = ref('')
 const selectedStatus = ref('')
+
+// Custom Select Search for Customer
+const isCustomerDropdownOpen = ref(false)
+const customerSearchTerm = ref('')
+const customerDropdownRef = ref<HTMLElement | null>(null)
+
+const filteredFormCustomers = computed(() => {
+  if (!customerSearchTerm.value) {
+    return customers.value
+  }
+  const q = customerSearchTerm.value.toLowerCase()
+  return customers.value.filter(c => c.name.toLowerCase().includes(q))
+})
+
+function selectFormCustomer(c: Customer) {
+  form.value.customerId = c.id
+  customerSearchTerm.value = c.name
+  isCustomerDropdownOpen.value = false
+}
+
+function toggleCustomerDropdown(event: Event) {
+  event.stopPropagation()
+  isCustomerDropdownOpen.value = !isCustomerDropdownOpen.value
+}
 const selectedBranch = ref('')
 const currentPage = ref(1)
 const perPage = ref(5)
@@ -506,24 +551,40 @@ onMounted(async () => {
   await fetchInvoices()
 })
 
-function closeDropdowns() {
+function closeDropdowns(event: MouseEvent) {
   activeDropdownId.value = null
+  
+  if (customerDropdownRef.value && !customerDropdownRef.value.contains(event.target as Node)) {
+    isCustomerDropdownOpen.value = false
+    
+    // Restore search term based on current selection
+    if (form.value.customerId) {
+      const selected = customers.value.find(c => c.id === form.value.customerId)
+      if (selected) {
+        customerSearchTerm.value = selected.name
+      }
+    } else {
+      customerSearchTerm.value = ''
+    }
+  }
 }
 
 async function loadMasterData() {
   const companyId = authStore.currentUser?.companyId
   if (!companyId) return
   try {
-    const [cRes, tRes, bRes, aRes] = await Promise.all([
+    const [cRes, tRes, bRes, aRes, iRes] = await Promise.all([
       customerApi.listByCompany(companyId),
       taxTypeApi.listByCompany(companyId),
       branchApi.listByCompany(companyId),
-      accountApi.listByCompany(companyId)
+      accountApi.listByCompany(companyId),
+      itemApi.listByCompany(companyId)
     ])
     customers.value = cRes
     taxTypes.value = tRes
     branches.value = bRes
     accounts.value = aRes
+    items.value = iRes
   } catch (err) {
     console.error('Failed to load master data lists', err)
   }
@@ -634,6 +695,7 @@ function toggleRowDropdown(id: string) {
 function openCreateModal() {
   isEdit.value = false
   targetEditId.value = null
+  customerSearchTerm.value = ''
   form.value = {
     branchId: branches.value[0]?.id || '',
     invoiceNumber: `INV/${new Date().getFullYear()}/${String(invoiceStore.invoices.length + 1).padStart(3, '0')}`,
@@ -650,6 +712,10 @@ function openCreateModal() {
 function openEditModal(invoice: SalesInvoice) {
   isEdit.value = true
   targetEditId.value = invoice.id
+  
+  const customer = customers.value.find(c => c.id === invoice.customerId)
+  customerSearchTerm.value = customer ? customer.name : ''
+  
   form.value = {
     branchId: invoice.branchId || '',
     invoiceNumber: invoice.invoiceNumber,
@@ -658,6 +724,7 @@ function openEditModal(invoice: SalesInvoice) {
     dueDate: new Date(invoice.dueDate).toISOString().substring(0, 10),
     notes: invoice.notes || '',
     lines: invoice.lines.map(line => ({
+      itemId: '',
       description: line.description,
       quantity: Number(line.quantity),
       unitPrice: Number(line.unitPrice),
@@ -676,6 +743,7 @@ function closeFormModal() {
 function addLine() {
   const defaultAccount = accounts.value.find(a => a.code === '4000' || a.accountType === 'Revenue')
   form.value.lines.push({
+    itemId: '',
     description: '',
     quantity: 1,
     unitPrice: 0,
@@ -683,6 +751,21 @@ function addLine() {
     taxTypeId: taxTypes.value[0]?.id || '',
     accountId: defaultAccount?.id || ''
   })
+}
+
+function onItemChange(line: any) {
+  if (!line.itemId) return
+  const item = items.value.find(i => i.id === line.itemId)
+  if (item) {
+    line.description = item.name
+    line.unitPrice = Number(item.unitPrice)
+    if (item.taxTypeId) {
+      line.taxTypeId = item.taxTypeId
+    }
+    if (item.saleAccountId) {
+      line.accountId = item.saleAccountId
+    }
+  }
 }
 
 function removeLine(index: number) {
@@ -1001,5 +1084,66 @@ function formatCurrency(val: number): string {
 .pagination-buttons {
   display: flex;
   gap: 6px;
+}
+
+/* Custom Select Search styles */
+.custom-select-search-container {
+  position: relative;
+}
+
+.custom-select-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.custom-select-search-wrapper .form-input {
+  width: 100%;
+  padding-right: 32px;
+}
+
+.custom-select-arrow {
+  position: absolute;
+  right: 12px;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+}
+
+.custom-select-option {
+  padding: 10px 14px;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  text-align: left;
+}
+
+.custom-select-option:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+.custom-select-no-results {
+  padding: 12px 14px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  text-align: center;
 }
 </style>

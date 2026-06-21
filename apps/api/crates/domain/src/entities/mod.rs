@@ -11,4 +11,5 @@ pub mod customer;
 pub mod supplier;
 pub mod bank_account;
 pub mod branch;
+pub mod item;
 

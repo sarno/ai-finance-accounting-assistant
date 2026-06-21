@@ -26,6 +26,7 @@ use finance_assistant_infra::{
         tax_repository::PgTaxRepository,
         approval_repository::PgApprovalRepository,
         invoice_repository::PgInvoiceRepository,
+        item_repository::PgItemRepository,
     },
 };
 use finance_assistant_app::services::{
@@ -34,6 +35,7 @@ use finance_assistant_app::services::{
     master_data_service::MasterDataService,
     approval_service::ApprovalService,
     invoice_service::InvoiceService,
+    item_service::ItemService,
 };
 
 
@@ -70,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
     let tax_repo     = Arc::new(PgTaxRepository::new(pool.clone()));
     let approval_repo = Arc::new(PgApprovalRepository::new(pool.clone()));
     let invoice_repo = Arc::new(PgInvoiceRepository::new(pool.clone()));
+    let item_repo = Arc::new(PgItemRepository::new(pool.clone()));
 
     let journal_svc  = Arc::new(JournalService::new(journal_repo.clone(), audit_repo.clone()));
     let auth_svc     = Arc::new(AuthService::new(
@@ -92,6 +95,7 @@ async fn main() -> anyhow::Result<()> {
         tax_repo.clone(),
         journal_repo.clone(),
     ));
+    let item_svc = Arc::new(ItemService::new(item_repo.clone()));
     let approval_svc = Arc::new(ApprovalService::new(
         approval_repo,
         journal_repo.clone(),
@@ -110,6 +114,7 @@ async fn main() -> anyhow::Result<()> {
         master_data_service: master_data_svc,
         approval_service: approval_svc,
         invoice_service: invoice_svc,
+        item_service: item_svc,
     };
 
 

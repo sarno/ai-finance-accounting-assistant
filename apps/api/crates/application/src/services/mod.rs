@@ -11,4 +11,5 @@ pub mod report_service;
 pub mod ai_orchestration_service;
 pub mod audit_service;
 pub mod master_data_service;
+pub mod item_service;
 

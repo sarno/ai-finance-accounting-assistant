@@ -10,4 +10,5 @@ pub mod bank_account_repository;
 pub mod tax_repository;
 pub mod approval_repository;
 pub mod invoice_repository;
+pub mod item_repository;
 

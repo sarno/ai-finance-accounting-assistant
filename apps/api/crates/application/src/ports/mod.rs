@@ -17,4 +17,5 @@ pub mod branch_repository;
 pub mod customer_repository;
 pub mod supplier_repository;
 pub mod bank_account_repository;
+pub mod item_repository;
 

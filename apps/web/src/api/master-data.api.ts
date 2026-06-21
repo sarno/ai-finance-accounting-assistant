@@ -6,7 +6,9 @@ import type {
   Supplier, CreateSupplierRequest, UpdateSupplierRequest,
   BankAccount, CreateBankAccountRequest, UpdateBankAccountRequest,
   TaxType, CreateTaxTypeRequest, UpdateTaxTypeRequest,
-  Branch, CreateBranchRequest, UpdateBranchRequest
+  Branch, CreateBranchRequest, UpdateBranchRequest,
+  ItemCategory, CreateItemCategoryRequest, UpdateItemCategoryRequest,
+  Item, CreateItemRequest, UpdateItemRequest
 } from '@/types/master-data.types'
 
 export const companyApi = {
@@ -139,6 +141,50 @@ export const branchApi = {
   update: async (id: string, req: UpdateBranchRequest): Promise<Branch> => {
     const { data } = await client.put<Branch>(`/branches/${id}`, req)
     return data
+  }
+}
+
+export const itemCategoryApi = {
+  listByCompany: async (companyId: string): Promise<ItemCategory[]> => {
+    const { data } = await client.get<ItemCategory[]>(`/companies/${companyId}/item-categories`)
+    return data
+  },
+  getById: async (id: string): Promise<ItemCategory> => {
+    const { data } = await client.get<ItemCategory>(`/item-categories/${id}`)
+    return data
+  },
+  create: async (req: CreateItemCategoryRequest): Promise<ItemCategory> => {
+    const { data } = await client.post<ItemCategory>('/item-categories', req)
+    return data
+  },
+  update: async (id: string, req: UpdateItemCategoryRequest): Promise<ItemCategory> => {
+    const { data } = await client.put<ItemCategory>(`/item-categories/${id}`, req)
+    return data
+  },
+  delete: async (id: string): Promise<void> => {
+    await client.delete(`/item-categories/${id}`)
+  }
+}
+
+export const itemApi = {
+  listByCompany: async (companyId: string): Promise<Item[]> => {
+    const { data } = await client.get<Item[]>(`/companies/${companyId}/items`)
+    return data
+  },
+  getById: async (id: string): Promise<Item> => {
+    const { data } = await client.get<Item>(`/items/${id}`)
+    return data
+  },
+  create: async (req: CreateItemRequest): Promise<Item> => {
+    const { data } = await client.post<Item>('/items', req)
+    return data
+  },
+  update: async (id: string, req: UpdateItemRequest): Promise<Item> => {
+    const { data } = await client.put<Item>(`/items/${id}`, req)
+    return data
+  },
+  delete: async (id: string): Promise<void> => {
+    await client.delete(`/items/${id}`)
   }
 }
 

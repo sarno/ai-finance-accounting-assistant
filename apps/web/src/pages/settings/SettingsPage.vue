@@ -311,6 +311,99 @@
       </div>
     </div>
 
+    <!-- ─── Tab Content: Item Categories ─── -->
+    <div v-if="activeTab === 'item-categories'">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>Item Categories</h3>
+        <button @click="openAddItemCategoryModal" class="btn btn-primary">+ Add Category</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="cat in itemCategories" :key="cat.id">
+              <td style="font-weight: 600; color: var(--accent-primary);">{{ cat.name }}</td>
+              <td>{{ cat.description || '-' }}</td>
+              <td>
+                <span :class="['badge', cat.isActive ? 'badge-success' : 'badge-danger']">
+                  {{ cat.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td>
+                <button @click="editItemCategory(cat)" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem; margin-right: 8px;">Edit</button>
+                <button @click="deleteItemCategory(cat.id)" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;">Delete</button>
+              </td>
+            </tr>
+            <tr v-if="itemCategories.length === 0">
+              <td colspan="4" style="text-align: center; color: var(--text-secondary);">No item categories found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── Tab Content: Items ─── -->
+    <div v-if="activeTab === 'items'">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>Items Master</h3>
+        <button @click="openAddItemModal" class="btn btn-primary">+ Add Item</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Unit Price</th>
+              <th>Sale COA</th>
+              <th>Tax Rate</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in items" :key="item.id">
+              <td style="font-weight: 600; color: var(--accent-primary);">{{ item.code }}</td>
+              <td>
+                <div style="font-weight: 500;">{{ item.name }}</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ item.description || '' }}</div>
+              </td>
+              <td>
+                <span class="badge badge-info">
+                  {{ itemCategories.find(c => c.id === item.categoryId)?.name || '-' }}
+                </span>
+              </td>
+              <td style="font-weight: 600;">{{ formatIDR(item.unitPrice) }}</td>
+              <td>{{ accounts.find(a => a.id === item.saleAccountId)?.code || '-' }}</td>
+              <td>{{ taxTypes.find(t => t.id === item.taxTypeId)?.name || '-' }}</td>
+              <td>
+                <span :class="['badge', item.isActive ? 'badge-success' : 'badge-danger']">
+                  {{ item.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td>
+                <button @click="editItem(item)" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem; margin-right: 8px;">Edit</button>
+                <button @click="deleteItem(item.id)" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;">Delete</button>
+              </td>
+            </tr>
+            <tr v-if="items.length === 0">
+              <td colspan="8" style="text-align: center; color: var(--text-secondary);">No items found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ─── Modals ─── -->
     
     <!-- Account Modal -->
@@ -595,6 +688,108 @@
         </form>
       </div>
     </div>
+
+    <!-- Item Category Modal -->
+    <div v-if="modals.itemCategory" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>{{ editingId ? 'Edit Item Category' : 'Add New Item Category' }}</h2>
+          <button @click="modals.itemCategory = false" class="modal-close">&times;</button>
+        </div>
+        <form @submit.prevent="submitItemCategory">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Category Name</label>
+              <input v-model="itemCategoryForm.name" type="text" class="form-input" placeholder="e.g. Services, Hardware" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea v-model="itemCategoryForm.description" class="form-input" placeholder="Category Description" rows="3"></textarea>
+            </div>
+            <div v-if="editingId" class="form-group">
+              <label class="form-label">
+                <input v-model="itemCategoryForm.isActive" type="checkbox" /> Active Status
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" @click="modals.itemCategory = false" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Category</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Item Modal -->
+    <div v-if="modals.item" class="modal-overlay">
+      <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+          <h2>{{ editingId ? 'Edit Item' : 'Add New Item' }}</h2>
+          <button @click="modals.item = false" class="modal-close">&times;</button>
+        </div>
+        <form @submit.prevent="submitItem">
+          <div class="modal-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group" style="grid-column: span 2;">
+              <label class="form-label">Category</label>
+              <select v-model="itemForm.categoryId" class="form-input">
+                <option value="">-- No Category --</option>
+                <option v-for="cat in itemCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Item Code</label>
+              <input v-model="itemForm.code" type="text" class="form-input" placeholder="e.g. SRV-CONS" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Item Name</label>
+              <input v-model="itemForm.name" type="text" class="form-input" placeholder="e.g. IT Consulting" required />
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+              <label class="form-label">Description</label>
+              <textarea v-model="itemForm.description" class="form-input" placeholder="Detailed Item description" rows="2"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Unit Price (IDR)</label>
+              <input v-model="itemForm.unitPrice" type="number" step="0.01" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tax Rate</label>
+              <select v-model="itemForm.taxTypeId" class="form-input">
+                <option value="">-- Select default tax rate --</option>
+                <option v-for="tax in taxTypes" :key="tax.id" :value="tax.id">{{ tax.name }} ({{ (tax.defaultRate * 100).toFixed(1) }}%)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sales COA Account</label>
+              <select v-model="itemForm.saleAccountId" class="form-input">
+                <option value="">-- Select COA revenue account --</option>
+                <option v-for="acc in accounts.filter(a => a.accountType.toLowerCase() === 'revenue')" :key="acc.id" :value="acc.id">
+                  {{ acc.code }} - {{ acc.name }}
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Purchase COA Account</label>
+              <select v-model="itemForm.purchaseAccountId" class="form-input">
+                <option value="">-- Select COA expense/asset account --</option>
+                <option v-for="acc in accounts.filter(a => ['expense', 'asset'].includes(a.accountType.toLowerCase()))" :key="acc.id" :value="acc.id">
+                  {{ acc.code }} - {{ acc.name }}
+                </option>
+              </select>
+            </div>
+            <div v-if="editingId" class="form-group" style="grid-column: span 2;">
+              <label class="form-label">
+                <input v-model="itemForm.isActive" type="checkbox" /> Active Status
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" @click="modals.item = false" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </MainLayout>
 </template>
 
@@ -602,6 +797,7 @@
 import { ref, reactive, watch, onMounted } from 'vue'
 import MainLayout from '@/components/MainLayout.vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { formatIDR } from '@/utils/format'
 import {
   companyApi,
   accountApi,
@@ -609,10 +805,13 @@ import {
   supplierApi,
   bankAccountApi,
   taxTypeApi,
-  branchApi
+  branchApi,
+  itemCategoryApi,
+  itemApi
 } from '@/api/master-data.api'
 import type {
-  Company, Account, Customer, Supplier, BankAccount, TaxType, Branch
+  Company, Account, Customer, Supplier, BankAccount, TaxType, Branch,
+  ItemCategory, Item
 } from '@/types/master-data.types'
 
 const auth = useAuthStore()
@@ -631,7 +830,9 @@ const tabItems = [
   { id: 'customers', label: '👥 Customers' },
   { id: 'suppliers', label: '🤝 Suppliers' },
   { id: 'banks', label: '🏦 Bank Accounts' },
-  { id: 'taxes', label: '⚖️ Tax configurations' }
+  { id: 'taxes', label: '⚖️ Tax configurations' },
+  { id: 'item-categories', label: '📦 Item Categories' },
+  { id: 'items', label: '🏷️ Items' }
 ]
 
 // Data lists
@@ -642,6 +843,8 @@ const customers = ref<Customer[]>([])
 const suppliers = ref<Supplier[]>([])
 const bankAccounts = ref<BankAccount[]>([])
 const taxTypes = ref<TaxType[]>([])
+const itemCategories = ref<ItemCategory[]>([])
+const items = ref<Item[]>([])
 
 // Active company ID
 const activeCompanyId = ref<string>('')
@@ -708,6 +911,24 @@ const branchForm = reactive({
   isActive: true
 })
 
+const itemCategoryForm = reactive({
+  name: '',
+  description: '',
+  isActive: true
+})
+
+const itemForm = reactive({
+  categoryId: '',
+  code: '',
+  name: '',
+  description: '',
+  unitPrice: 0,
+  saleAccountId: '',
+  purchaseAccountId: '',
+  taxTypeId: '',
+  isActive: true
+})
+
 // Modals Visibility State
 const modals = reactive({
   account: false,
@@ -715,7 +936,9 @@ const modals = reactive({
   supplier: false,
   bank: false,
   tax: false,
-  branch: false
+  branch: false,
+  itemCategory: false,
+  item: false
 })
 
 // Lifecycle
@@ -773,6 +996,13 @@ async function loadTabSpecificData() {
     } else if (activeTab.value === 'taxes') {
       accounts.value = await accountApi.listByCompany(activeCompanyId.value)
       taxTypes.value = await taxTypeApi.listByCompany(activeCompanyId.value)
+    } else if (activeTab.value === 'item-categories') {
+      itemCategories.value = await itemCategoryApi.listByCompany(activeCompanyId.value)
+    } else if (activeTab.value === 'items') {
+      accounts.value = await accountApi.listByCompany(activeCompanyId.value)
+      taxTypes.value = await taxTypeApi.listByCompany(activeCompanyId.value)
+      itemCategories.value = await itemCategoryApi.listByCompany(activeCompanyId.value)
+      items.value = await itemApi.listByCompany(activeCompanyId.value)
     }
   } catch (err: any) {
     errorMsg.value = `Failed to load data for tab: ${activeTab.value}`
@@ -1154,6 +1384,148 @@ async function submitBranch() {
     await loadTabSpecificData()
   } catch (err: any) {
     errorMsg.value = err.response?.data?.message || 'Failed to save branch'
+  }
+}
+
+// ─── Item Category Actions ───
+function openAddItemCategoryModal() {
+  editingId.value = null
+  Object.assign(itemCategoryForm, {
+    name: '',
+    description: '',
+    isActive: true
+  })
+  modals.itemCategory = true
+}
+
+function editItemCategory(c: ItemCategory) {
+  editingId.value = c.id
+  Object.assign(itemCategoryForm, {
+    name: c.name,
+    description: c.description || '',
+    isActive: c.isActive
+  })
+  modals.itemCategory = true
+}
+
+async function deleteItemCategory(id: string) {
+  if (!confirm('Are you sure you want to delete this category?')) return
+  try {
+    errorMsg.value = null
+    successMsg.value = null
+    await itemCategoryApi.delete(id)
+    successMsg.value = 'Item category deleted successfully'
+    await loadTabSpecificData()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Failed to delete item category'
+  }
+}
+
+async function submitItemCategory() {
+  if (!activeCompanyId.value) return
+  try {
+    errorMsg.value = null
+    successMsg.value = null
+    if (editingId.value) {
+      await itemCategoryApi.update(editingId.value, {
+        name: itemCategoryForm.name,
+        description: itemCategoryForm.description || undefined,
+        isActive: itemCategoryForm.isActive
+      })
+      successMsg.value = 'Item category updated successfully'
+    } else {
+      await itemCategoryApi.create({
+        companyId: activeCompanyId.value,
+        name: itemCategoryForm.name,
+        description: itemCategoryForm.description || undefined
+      })
+      successMsg.value = 'Item category created successfully'
+    }
+    modals.itemCategory = false
+    await loadTabSpecificData()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Failed to save item category'
+  }
+}
+
+// ─── Item Actions ───
+function openAddItemModal() {
+  editingId.value = null
+  Object.assign(itemForm, {
+    categoryId: '',
+    code: '',
+    name: '',
+    description: '',
+    unitPrice: 0,
+    saleAccountId: '',
+    purchaseAccountId: '',
+    taxTypeId: '',
+    isActive: true
+  })
+  modals.item = true
+}
+
+function editItem(i: Item) {
+  editingId.value = i.id
+  Object.assign(itemForm, {
+    categoryId: i.categoryId || '',
+    code: i.code,
+    name: i.name,
+    description: i.description || '',
+    unitPrice: i.unitPrice,
+    saleAccountId: i.saleAccountId || '',
+    purchaseAccountId: i.purchaseAccountId || '',
+    taxTypeId: i.taxTypeId || '',
+    isActive: i.isActive
+  })
+  modals.item = true
+}
+
+async function deleteItem(id: string) {
+  if (!confirm('Are you sure you want to delete this item?')) return
+  try {
+    errorMsg.value = null
+    successMsg.value = null
+    await itemApi.delete(id)
+    successMsg.value = 'Item deleted successfully'
+    await loadTabSpecificData()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Failed to delete item'
+  }
+}
+
+async function submitItem() {
+  if (!activeCompanyId.value) return
+  try {
+    errorMsg.value = null
+    successMsg.value = null
+    const payload = {
+      categoryId: itemForm.categoryId || undefined,
+      code: itemForm.code,
+      name: itemForm.name,
+      description: itemForm.description || undefined,
+      unitPrice: Number(itemForm.unitPrice),
+      saleAccountId: itemForm.saleAccountId || undefined,
+      purchaseAccountId: itemForm.purchaseAccountId || undefined,
+      taxTypeId: itemForm.taxTypeId || undefined
+    }
+    if (editingId.value) {
+      await itemApi.update(editingId.value, {
+        ...payload,
+        isActive: itemForm.isActive
+      })
+      successMsg.value = 'Item updated successfully'
+    } else {
+      await itemApi.create({
+        companyId: activeCompanyId.value,
+        ...payload
+      })
+      successMsg.value = 'Item created successfully'
+    }
+    modals.item = false
+    await loadTabSpecificData()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Failed to save item'
   }
 }
 </script>

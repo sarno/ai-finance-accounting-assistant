@@ -13,7 +13,7 @@ use tower_http::{
 use std::time::Duration;
 
 use crate::{
-    handlers::{auth, health, journals, reports, master_data, approvals, invoices},
+    handlers::{auth, health, journals, reports, master_data, approvals, invoices, items},
     middleware::auth_middleware,
     state::AppState,
 };
@@ -78,6 +78,14 @@ pub fn build(state: AppState) -> Router {
         .route("/api/branches",             post(master_data::create_branch))
         .route("/api/branches/:id",         get(master_data::get_branch).put(master_data::update_branch))
         .route("/api/companies/:company_id/branches", get(master_data::list_branches))
+        // Item Categories
+        .route("/api/item-categories",       post(items::create_category))
+        .route("/api/item-categories/:id",   get(items::get_category).put(items::update_category).delete(items::delete_category))
+        .route("/api/companies/:company_id/item-categories", get(items::list_categories))
+        // Items
+        .route("/api/items",                 post(items::create_item))
+        .route("/api/items/:id",             get(items::get_item).put(items::update_item).delete(items::delete_item))
+        .route("/api/companies/:company_id/items", get(items::list_items))
         .layer(middleware::from_fn_with_state(shared_state.clone(), auth_middleware::require_auth));
 
 

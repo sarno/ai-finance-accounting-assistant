@@ -202,3 +202,65 @@ export interface UpdateBranchRequest {
   isActive: boolean
 }
 
+export interface ItemCategory {
+  id: string
+  companyId: string
+  name: string
+  description?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateItemCategoryRequest {
+  companyId: string
+  name: string
+  description?: string
+}
+
+export interface UpdateItemCategoryRequest {
+  name: string
+  description?: string
+  isActive: boolean
+}
+
+export interface Item {
+  id: string
+  companyId: string
+  categoryId?: string
+  code: string
+  name: string
+  description?: string
+  unitPrice: number
+  saleAccountId?: string
+  purchaseAccountId?: string
+  taxTypeId?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateItemRequest {
+  companyId: string
+  categoryId?: string
+  code: string
+  name: string
+  description?: string
+  unitPrice: number
+  saleAccountId?: string
+  purchaseAccountId?: string
+  taxTypeId?: string
+}
+
+export interface UpdateItemRequest {
+  categoryId?: string
+  code: string
+  name: string
+  description?: string
+  unitPrice: number
+  saleAccountId?: string
+  purchaseAccountId?: string
+  taxTypeId?: string
+  isActive: boolean
+}
+
