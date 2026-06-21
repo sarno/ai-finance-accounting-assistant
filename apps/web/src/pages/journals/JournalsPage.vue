@@ -80,32 +80,61 @@
                 {{ formatStatus(journal.status) }}
               </span>
             </td>
-            <td>
-              <div style="display: flex; gap: 8px;">
-                <button class="btn btn-secondary btn-xs" @click="viewDetails(journal)">View</button>
-                <button
-                  v-if="journal.status === 'draft'"
-                  class="btn btn-secondary btn-xs"
-                  @click="submitApproval(journal.id)"
-                >
-                  Submit
+            <td style="position: relative; width: 80px; text-align: center;">
+              <div class="row-actions-container">
+                <button class="btn-actions-trigger" @click="toggleRowDropdown(journal.id, $event)">
+                  <svg class="actions-trigger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="1.5" />
+                    <circle cx="19" cy="12" r="1.5" />
+                    <circle cx="5" cy="12" r="1.5" />
+                  </svg>
                 </button>
-                <button
-                  v-if="journal.status === 'approved'"
-                  class="btn btn-primary btn-xs"
-                  @click="postJournal(journal.id)"
-                >
-                  Post
-                </button>
-                <!-- Manager/Owner actions direct approve -->
-                <button
-                  v-if="journal.status === 'waiting_approval' && authStore.canApprove"
-                  class="btn btn-primary btn-xs"
-                  style="background: #10b981; border-color: #10b981;"
-                  @click="approveDirect(journal.id)"
-                >
-                  Approve
-                </button>
+
+                <transition name="dropdown-fade">
+                  <div v-if="activeDropdownId === journal.id" class="row-actions-dropdown">
+                    <button class="dropdown-item" @click="viewDetails(journal)">
+                      👁️ View Details
+                    </button>
+                    <button
+                      v-if="journal.status.toLowerCase() === 'draft'"
+                      class="dropdown-item"
+                      @click="openEditModal(journal)"
+                    >
+                      ✏️ Edit Draft
+                    </button>
+                    <button
+                      v-if="journal.status.toLowerCase() === 'draft'"
+                      class="dropdown-item"
+                      @click="submitApproval(journal.id)"
+                    >
+                      📤 Submit Approval
+                    </button>
+                    <button
+                      v-if="journal.status.toLowerCase() === 'approved'"
+                      class="dropdown-item"
+                      @click="postJournal(journal.id)"
+                    >
+                      ⚙️ Post Ledger
+                    </button>
+                    <button
+                      v-if="journal.status.toLowerCase() === 'waiting_approval' && authStore.canApprove"
+                      class="dropdown-item text-success"
+                      @click="approveDirect(journal.id)"
+                    >
+                      ✅ Approve Entry
+                    </button>
+                    
+                    <div v-if="journal.status.toLowerCase() === 'draft'" class="dropdown-divider"></div>
+                    
+                    <button
+                      v-if="journal.status.toLowerCase() === 'draft'"
+                      class="dropdown-item text-danger"
+                      @click="handleDelete(journal.id)"
+                    >
+                      🗑️ Delete Draft
+                    </button>
+                  </div>
+                </transition>
               </div>
             </td>
           </tr>
@@ -113,11 +142,44 @@
       </table>
     </div>
 
-    <!-- Create Journal Entry Modal -->
+    <!-- Pagination Footer -->
+    <div class="pagination-footer" v-if="totalPages > 1">
+      <div class="pagination-info">
+        Showing {{ paginationStart }} to {{ paginationEnd }} of {{ filteredJournals.length }} entries
+      </div>
+      <div class="pagination-buttons">
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="currentPage === 1"
+          @click="changePage(currentPage - 1)"
+        >
+          Previous
+        </button>
+        
+        <button
+          v-for="page in visiblePages"
+          :key="page"
+          :class="['btn btn-sm', page === currentPage ? 'btn-primary' : 'btn-secondary']"
+          @click="changePage(page)"
+        >
+          {{ page }}
+        </button>
+        
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="currentPage === totalPages"
+          @click="changePage(currentPage + 1)"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+
+    <!-- Create/Edit Journal Entry Modal -->
     <div v-if="showCreateModal" class="modal-overlay" @click.self="closeCreateModal">
       <div class="modal-content modal-lg-custom">
         <div class="modal-header">
-          <h2>Create General Journal Entry</h2>
+          <h2>{{ editingJournalId ? 'Edit General Journal Entry' : 'Create General Journal Entry' }}</h2>
           <button class="modal-close" @click="closeCreateModal">&times;</button>
         </div>
         <div class="modal-body">
@@ -266,7 +328,7 @@
             :disabled="!isValid || saving"
             @click="saveDraft"
           >
-            {{ saving ? 'Saving...' : 'Save Draft' }}
+            {{ saving ? 'Saving...' : (editingJournalId ? 'Save Changes' : 'Save Draft') }}
           </button>
         </div>
       </div>
@@ -357,15 +419,33 @@
           <button type="button" class="btn btn-secondary" @click="closeDetailModal">Close</button>
           
           <button
-            v-if="selectedJournal.status === 'draft'"
+            v-if="selectedJournal.status.toLowerCase() === 'draft'"
+            class="btn btn-secondary"
+            style="background: #e2e8f0; color: var(--text-primary);"
+            @click="editFromDetail"
+          >
+            ✏️ Edit Draft
+          </button>
+
+          <button
+            v-if="selectedJournal.status.toLowerCase() === 'draft'"
+            class="btn btn-danger"
+            @click="deleteFromDetail"
+          >
+            🗑️ Delete Draft
+          </button>
+          
+          <button
+            v-if="selectedJournal.status.toLowerCase() === 'draft'"
             class="btn btn-primary"
+            style="background-color: var(--info-bg); color: var(--info); border: 1px solid rgba(59, 130, 246, 0.15);"
             @click="submitApprovalFromDetail"
           >
             Submit for Approval
           </button>
           
           <button
-            v-if="selectedJournal.status === 'approved'"
+            v-if="selectedJournal.status.toLowerCase() === 'approved'"
             class="btn btn-primary"
             @click="postJournalFromDetail"
           >
@@ -373,7 +453,7 @@
           </button>
 
           <button
-            v-if="selectedJournal.status === 'waiting_approval' && authStore.canApprove"
+            v-if="selectedJournal.status.toLowerCase() === 'waiting_approval' && authStore.canApprove"
             class="btn btn-primary"
             style="background: #10b981; border-color: #10b981;"
             @click="approveDirectFromDetail"
@@ -383,12 +463,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Custom Confirmation Dialog Modal -->
+    <ConfirmDialog
+      :is-open="confirmDialog.isOpen"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      :confirm-text="confirmDialog.confirmText"
+      :cancel-text="confirmDialog.cancelText"
+      :is-danger="confirmDialog.isDanger"
+      @confirm="handleConfirmDialog(true)"
+      @cancel="handleConfirmDialog(false)"
+    />
   </MainLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import MainLayout from '@/components/MainLayout.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useJournalStore } from '@/stores/journal.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { accountApi, branchApi } from '@/api/master-data.api'
@@ -411,10 +504,29 @@ const activeAccounts = computed(() => accounts.value.filter(a => a.isActive))
 const branches = ref<Branch[]>([])
 const activeBranches = computed(() => branches.value.filter(b => b.isActive))
 
-// Create modal form state
+// Create/Edit modal form state
 const showCreateModal = ref(false)
+const editingJournalId = ref<string | null>(null)
 const modalError = ref<string | null>(null)
 const saving = ref(false)
+
+// Row actions dropdown state
+const activeDropdownId = ref<string | null>(null)
+
+// Custom Confirmation Dialog State
+const confirmDialog = ref({
+  isOpen: false,
+  title: 'Confirm Action',
+  message: 'Are you sure you want to proceed?',
+  confirmText: 'Confirm',
+  cancelText: 'Cancel',
+  isDanger: false,
+  resolve: null as ((value: boolean) => void) | null
+})
+
+// Pagination State
+const currentPage = ref(1)
+const perPage = ref(5)
 
 interface FormLine {
   accountId: string
@@ -436,7 +548,7 @@ const showDetailModal = ref(false)
 const selectedJournal = ref<JournalEntry | null>(null)
 
 // Filtering journals list based on UI selection
-const journalsList = computed(() => {
+const filteredJournals = computed(() => {
   return journalStore.journals.filter(j => {
     // search filter
     if (searchTerm.value) {
@@ -446,12 +558,99 @@ const journalsList = computed(() => {
       if (!matchesRef && !matchesDesc) return false
     }
     // status filter
-    if (selectedStatus.value && j.status !== selectedStatus.value) {
+    if (selectedStatus.value && j.status.toLowerCase() !== selectedStatus.value.toLowerCase()) {
       return false
     }
     return true
   })
 })
+
+// Sliced journals list for the current page
+const journalsList = computed(() => {
+  const start = (currentPage.value - 1) * perPage.value
+  const end = start + perPage.value
+  return filteredJournals.value.slice(start, end)
+})
+
+// Total pages computation
+const totalPages = computed(() => {
+  return Math.ceil(filteredJournals.value.length / perPage.value)
+})
+
+// Pagination details
+const paginationStart = computed(() => {
+  if (filteredJournals.value.length === 0) return 0
+  return (currentPage.value - 1) * perPage.value + 1
+})
+
+const paginationEnd = computed(() => {
+  return Math.min(currentPage.value * perPage.value, filteredJournals.value.length)
+})
+
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  const maxVisible = 5
+  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+  let end = Math.min(totalPages.value, start + maxVisible - 1)
+  
+  if (end - start + 1 < maxVisible) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  return pages
+})
+
+function changePage(page: number) {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+// Dropdown toggle and click outside logic
+function toggleRowDropdown(id: string, event: Event) {
+  event.stopPropagation()
+  if (activeDropdownId.value === id) {
+    activeDropdownId.value = null
+  } else {
+    activeDropdownId.value = id
+  }
+}
+
+// Close dropdowns when clicking outside
+function closeAllDropdowns() {
+  activeDropdownId.value = null
+}
+
+// Custom Promise-based confirm dialog helper function
+function confirmCustom(options: {
+  title?: string
+  message: string
+  confirmText?: string
+  cancelText?: string
+  isDanger?: boolean
+}) {
+  return new Promise<boolean>((resolve) => {
+    confirmDialog.value = {
+      isOpen: true,
+      title: options.title || 'Confirm Action',
+      message: options.message,
+      confirmText: options.confirmText || 'Confirm',
+      cancelText: options.cancelText || 'Cancel',
+      isDanger: options.isDanger || false,
+      resolve
+    }
+  })
+}
+
+function handleConfirmDialog(result: boolean) {
+  confirmDialog.value.isOpen = false
+  if (confirmDialog.value.resolve) {
+    confirmDialog.value.resolve(result)
+  }
+}
 
 // COA accounts map for easy naming resolution
 const accountsMap = computed(() => {
@@ -504,9 +703,17 @@ const isValid = computed(() => {
 
 // Load data on load
 onMounted(async () => {
+  await journalStore.setFilters({ perPage: 1000 }) // Load all journals for client-side pagination
   await fetchJournals()
   await loadAccounts()
   await loadBranches()
+  
+  // Close dropdowns when clicking outside
+  document.addEventListener('click', closeAllDropdowns)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeAllDropdowns)
 })
 
 async function fetchJournals() {
@@ -545,16 +752,18 @@ function getBranchCode(branchId?: string) {
 }
 
 function applyFilters() {
-  // Filters applied locally via computed property journalsList
+  currentPage.value = 1
 }
 
 function resetFilters() {
   searchTerm.value = ''
   selectedStatus.value = ''
+  currentPage.value = 1
 }
 
 // Form logic
 function openCreateModal() {
+  editingJournalId.value = null
   const defaultBranchId = activeBranches.value.length > 0 ? activeBranches.value[0].id : ''
   form.value = {
     transactionDate: new Date().toISOString().split('T')[0],
@@ -570,10 +779,35 @@ function openCreateModal() {
   showCreateModal.value = true
 }
 
-function closeCreateModal() {
-  showCreateModal.value = false
+// Populate form state for editing an existing journal draft
+function openEditModal(journal: JournalEntry) {
+  editingJournalId.value = journal.id
+  modalError.value = null
+  
+  // Format transactionDate to YYYY-MM-DD
+  const txDate = journal.transactionDate.split('T')[0]
+  
+  form.value = {
+    transactionDate: txDate,
+    referenceNumber: journal.referenceNumber || '',
+    description: journal.description,
+    branchId: journal.branchId || '',
+    lines: journal.lines.map(l => ({
+      accountId: l.accountId,
+      debit: Number(l.debit) || 0,
+      credit: Number(l.credit) || 0,
+      description: l.description
+    }))
+  }
+  showCreateModal.value = true
 }
 
+function closeCreateModal() {
+  showCreateModal.value = false
+  editingJournalId.value = null
+}
+
+// Add/Remove lines in the entries editor
 function addLine() {
   form.value.lines.push({ accountId: '', debit: 0, credit: 0 })
 }
@@ -610,7 +844,7 @@ async function saveDraft() {
     return
   }
 
-  // Format request
+  // Format request payload
   const requestPayload = {
     companyId,
     branchId: form.value.branchId || undefined,
@@ -621,20 +855,47 @@ async function saveDraft() {
       accountId: l.accountId,
       debit: Number(l.debit) || 0,
       credit: Number(l.credit) || 0,
-      description: form.value.description.trim() // standard line description inherits main desc if omitted
+      description: form.value.description.trim() // line description inherits main desc
     }))
   }
 
   try {
-    await journalStore.createDraft(requestPayload)
+    if (editingJournalId.value) {
+      await journalStore.updateDraft(editingJournalId.value, requestPayload)
+      successMsg.value = 'Journal Entry draft updated successfully.'
+    } else {
+      await journalStore.createDraft(requestPayload)
+      successMsg.value = 'Journal Entry draft saved successfully.'
+    }
     showCreateModal.value = false
-    successMsg.value = 'Journal Entry draft saved successfully.'
-    // Refresh lists
+    // Refresh list
     await fetchJournals()
   } catch (err: any) {
-    modalError.value = err.response?.data?.message || err.message || 'Failed to save journal draft.'
+    modalError.value = err.response?.data?.message || err.message || 'Failed to save journal.'
   } finally {
     saving.value = false
+  }
+}
+
+async function handleDelete(id: string) {
+  const confirmed = await confirmCustom({
+    title: 'Delete Journal Draft',
+    message: 'Are you sure you want to delete this journal entry draft? This action cannot be undone.',
+    confirmText: 'Delete Draft',
+    cancelText: 'Cancel',
+    isDanger: true
+  })
+  
+  if (!confirmed) return
+  
+  errorMsg.value = null
+  successMsg.value = null
+  try {
+    await journalStore.deleteDraft(id)
+    successMsg.value = 'Journal Entry draft deleted successfully.'
+    await fetchJournals()
+  } catch (err: any) {
+    errorMsg.value = err.message || 'Failed to delete journal entry.'
   }
 }
 
@@ -667,9 +928,8 @@ async function approveDirect(id: string) {
   errorMsg.value = null
   successMsg.value = null
   try {
-    // Call approval endpoint
     const { journalApi } = await import('@/api/journals.api')
-    await journalApi.approve(id) // direct helper approve endpoint
+    await journalApi.approve(id)
     successMsg.value = 'Journal entry approved.'
     await fetchJournals()
   } catch (err: any) {
@@ -686,6 +946,20 @@ function viewDetails(journal: JournalEntry) {
 function closeDetailModal() {
   showDetailModal.value = false
   selectedJournal.value = null
+}
+
+function editFromDetail() {
+  if (!selectedJournal.value) return
+  const journal = selectedJournal.value
+  closeDetailModal()
+  openEditModal(journal)
+}
+
+async function deleteFromDetail() {
+  if (!selectedJournal.value) return
+  const id = selectedJournal.value.id
+  closeDetailModal()
+  await handleDelete(id)
 }
 
 async function submitApprovalFromDetail() {
@@ -714,6 +988,7 @@ function getJournalTotal(journal: JournalEntry, type: 'debit' | 'credit'): numbe
   return journal.lines.reduce((sum, l) => sum + (type === 'debit' ? Number(l.debit) : Number(l.credit)), 0)
 }
 
+// Format date to local readable format
 function formatDate(dateStr: string): string {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -736,7 +1011,7 @@ function formatStatus(status: string): string {
 }
 
 function getStatusBadgeClass(status: string): string {
-  switch (status) {
+  switch (status.toLowerCase()) {
     case 'draft':
       return 'badge-warning'
     case 'waiting_approval':
@@ -745,7 +1020,7 @@ function getStatusBadgeClass(status: string): string {
     case 'approved':
       return 'badge-success'
     case 'posted':
-      return 'badge-success' // Or secondary color if customized, success fits indigo posted state
+      return 'badge-success'
     case 'rejected':
     case 'cancelled':
       return 'badge-danger'
@@ -775,6 +1050,136 @@ function getStatusBadgeClass(status: string): string {
 .btn-sm {
   padding: 6px 12px;
   font-size: 0.8rem;
+}
+
+.btn-edit {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-edit:hover {
+  background-color: var(--border-color);
+}
+
+.table-container {
+  overflow: visible !important; /* Allow the actions dropdown to bleed outside table boundary without scroll/cropping */
+}
+
+/* Row Action Dropdown Styling */
+.row-actions-container {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-actions-trigger {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.btn-actions-trigger:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.actions-trigger-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.row-actions-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 170px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  padding: 6px;
+  transform-origin: top right;
+}
+
+.row-actions-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 0.825rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.row-actions-dropdown .dropdown-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.row-actions-dropdown .dropdown-item.text-success {
+  color: var(--success);
+}
+
+.row-actions-dropdown .dropdown-item.text-success:hover {
+  background-color: var(--success-bg);
+  color: var(--success);
+}
+
+.row-actions-dropdown .dropdown-item.text-danger {
+  color: var(--danger);
+}
+
+.row-actions-dropdown .dropdown-item.text-danger:hover {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+}
+
+.row-actions-dropdown .dropdown-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 6px 0;
+}
+
+/* Pagination Footer */
+.pagination-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding: 16px 24px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 6px;
 }
 
 /* Lines editor styling */
@@ -931,5 +1336,17 @@ function getStatusBadgeClass(status: string): string {
   text-align: center;
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+/* Transition Animations */
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: all var(--transition-fast);
+}
+
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(-4px);
 }
 </style>

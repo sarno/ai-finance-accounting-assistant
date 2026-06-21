@@ -11,13 +11,40 @@
     <div v-if="successMsg" class="alert alert-success">{{ successMsg }}</div>
     <div v-if="errorMsg" class="alert alert-danger">{{ errorMsg }}</div>
 
+    <!-- Filters/Search Card -->
+    <div class="card" style="margin-bottom: 24px; padding: 16px;">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center;">
+        <div style="flex: 1; min-width: 200px;">
+          <input
+            v-model="searchTerm"
+            type="text"
+            class="form-input"
+            placeholder="Search by requested by, reference number..."
+            @input="applyFilters"
+          />
+        </div>
+        <div style="width: 220px;">
+          <select v-model="selectedDocType" class="form-select" @change="applyFilters">
+            <option value="">All Document Types</option>
+            <option v-for="type in uniqueDocTypes" :key="type" :value="type">
+              {{ formatDocType(type) }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-secondary" @click="resetFilters">Reset</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Approvals List Table -->
     <div class="table-container">
-      <div v-if="approvalStore.loading && approvalStore.pendingApprovals.length === 0" class="loading-state">
+      <div v-if="approvalStore.loading && filteredApprovals.length === 0" class="loading-state">
         Loading pending approval requests...
       </div>
-      <div v-else-if="approvalStore.pendingApprovals.length === 0" class="empty-state">
-        No pending approvals found. Excellent!
+      <div v-else-if="filteredApprovals.length === 0" class="empty-state">
+        <span v-if="searchTerm || selectedDocType">No pending approvals matching your filters.</span>
+        <span v-else>No pending approvals found. Excellent!</span>
       </div>
       <table v-else>
         <thead>
@@ -31,16 +58,16 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="req in approvalStore.pendingApprovals" :key="req.id">
+          <tr v-for="req in paginatedApprovals" :key="req.id">
             <td>{{ formatDate(req.createdAt) }}</td>
-            <td>{{ req.requestedBy || 'System' }}</td>
+            <td>{{ req.requestedByName || req.requestedBy || 'System' }}</td>
             <td>
               <span class="badge badge-info" style="text-transform: capitalize;">
                 {{ formatDocType(req.documentType) }}
               </span>
             </td>
-            <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-secondary);">
-              {{ req.documentId }}
+            <td style="font-family: monospace; font-size: 0.85rem; font-weight: 500; color: var(--accent-primary);">
+              {{ req.documentReference || req.documentId }}
             </td>
             <td>
               <span class="badge badge-warning">
@@ -57,6 +84,39 @@
       </table>
     </div>
 
+    <!-- Pagination Footer -->
+    <div class="pagination-footer" v-if="filteredApprovals.length > 0">
+      <div class="pagination-info">
+        Showing {{ paginationStart }} to {{ paginationEnd }} of {{ filteredApprovals.length }} entries
+      </div>
+      <div class="pagination-buttons">
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="currentPage === 1"
+          @click="changePage(currentPage - 1)"
+        >
+          Previous
+        </button>
+        
+        <button
+          v-for="page in visiblePages"
+          :key="page"
+          :class="['btn btn-sm', page === currentPage ? 'btn-primary' : 'btn-secondary']"
+          @click="changePage(page)"
+        >
+          {{ page }}
+        </button>
+        
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="currentPage === totalPages"
+          @click="changePage(currentPage + 1)"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+
     <!-- Review & Action Dialog Modal -->
     <div v-if="showProcessModal && activeRequest" class="modal-overlay" @click.self="closeProcessModal">
       <div class="modal-content modal-lg-custom">
@@ -69,7 +129,7 @@
           <div class="meta-card">
             <div>
               <p class="meta-label">Requested By</p>
-              <p class="meta-val">{{ activeRequest.requestedBy || 'System' }}</p>
+              <p class="meta-val">{{ activeRequest.requestedByName || activeRequest.requestedBy || 'System' }}</p>
             </div>
             <div>
               <p class="meta-label">Request Date</p>
@@ -143,6 +203,70 @@
               </div>
             </div>
 
+            <!-- Sales Invoice Details Display -->
+            <div v-else-if="activeRequest.documentType === 'sales_invoice' && invoiceDetails" class="doc-details-box">
+              <div class="detail-grid" style="margin-bottom: 16px;">
+                <div>
+                  <p class="detail-label">Invoice Number</p>
+                  <p class="detail-val-highlight">{{ invoiceDetails.invoiceNumber }}</p>
+                </div>
+                <div>
+                  <p class="detail-label">Customer</p>
+                  <p class="detail-val">{{ getCustomerName(invoiceDetails.customerId) }}</p>
+                </div>
+                <div>
+                  <p class="detail-label">Invoice Date</p>
+                  <p class="detail-val">{{ formatDate(invoiceDetails.invoiceDate) }}</p>
+                </div>
+                <div>
+                  <p class="detail-label">Due Date</p>
+                  <p class="detail-val">{{ formatDate(invoiceDetails.dueDate) }}</p>
+                </div>
+              </div>
+
+              <h4>Invoice Lines</h4>
+              <div class="table-container" style="margin-top: 8px;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Description</th>
+                      <th>Account</th>
+                      <th style="text-align: right;">Qty</th>
+                      <th style="text-align: right;">Unit Price</th>
+                      <th style="text-align: right;">Discount</th>
+                      <th style="text-align: right;">Tax Amount</th>
+                      <th style="text-align: right;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="line in invoiceDetails.lines" :key="line.id">
+                      <td>{{ line.description }}</td>
+                      <td>{{ getAccountName(line.accountId) }}</td>
+                      <td style="text-align: right;">{{ line.quantity }}</td>
+                      <td style="text-align: right;">{{ formatCurrency(line.unitPrice) }}</td>
+                      <td style="text-align: right;">{{ line.discountAmount > 0 ? formatCurrency(line.discountAmount) : '-' }}</td>
+                      <td style="text-align: right;">{{ line.taxAmount > 0 ? formatCurrency(line.taxAmount) : '-' }}</td>
+                      <td style="text-align: right; font-weight: 500;">{{ formatCurrency(line.lineTotal) }}</td>
+                    </tr>
+                    <tr class="totals-row">
+                      <td colspan="5" style="font-weight: 600;">Subtotal</td>
+                      <td colspan="2" style="text-align: right; font-weight: 600;">{{ formatCurrency(invoiceDetails.subtotal) }}</td>
+                    </tr>
+                    <tr class="totals-row" style="border-top: none;">
+                      <td colspan="5" style="font-weight: 600;">Tax Amount</td>
+                      <td colspan="2" style="text-align: right; font-weight: 600;">{{ formatCurrency(invoiceDetails.taxAmount) }}</td>
+                    </tr>
+                    <tr class="totals-row" style="border-top: none;">
+                      <td colspan="5" style="font-weight: 700; color: var(--accent-primary);">Grand Total</td>
+                      <td colspan="2" style="text-align: right; font-weight: 700; color: var(--accent-primary); font-size: 1.05rem;">
+                        {{ formatCurrency(invoiceDetails.totalAmount) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <!-- Fallback for other doc types -->
             <div v-else class="empty-state" style="margin-top: 8px;">
               Details parser not implemented for document type: {{ activeRequest.documentType }}
@@ -194,10 +318,12 @@ import MainLayout from '@/components/MainLayout.vue'
 import { useApprovalStore } from '@/stores/approval.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { journalApi } from '@/api/journals.api'
-import { accountApi } from '@/api/master-data.api'
+import { invoiceApi } from '@/api/invoices.api'
+import { customerApi, accountApi } from '@/api/master-data.api'
 import type { ApprovalRequest } from '@/types/approval.types'
 import type { JournalEntry } from '@/types/journal.types'
-import type { Account } from '@/types/master-data.types'
+import type { SalesInvoice } from '@/types/invoice.types'
+import type { Account, Customer } from '@/types/master-data.types'
 
 const approvalStore = useApprovalStore()
 const authStore = useAuthStore()
@@ -205,6 +331,12 @@ const authStore = useAuthStore()
 // Notifications
 const successMsg = ref<string | null>(null)
 const errorMsg = ref<string | null>(null)
+
+// Search, Filter, Pagination states
+const searchTerm = ref('')
+const selectedDocType = ref('')
+const currentPage = ref(1)
+const perPage = ref(10)
 
 // Modal states
 const showProcessModal = ref(false)
@@ -216,11 +348,96 @@ const submitting = ref(false)
 const loadingDoc = ref(false)
 const docLoadError = ref<string | null>(null)
 const journalDetails = ref<JournalEntry | null>(null)
+const invoiceDetails = ref<SalesInvoice | null>(null)
 const accounts = ref<Account[]>([])
+const customers = ref<Customer[]>([])
+
+// Computeds for filtering & paging
+const uniqueDocTypes = computed(() => {
+  const types = new Set<string>()
+  approvalStore.pendingApprovals.forEach(req => {
+    if (req.documentType) {
+      types.add(req.documentType)
+    }
+  })
+  return Array.from(types)
+})
+
+const filteredApprovals = computed(() => {
+  return approvalStore.pendingApprovals.filter(req => {
+    // Search Term filter
+    if (searchTerm.value) {
+      const q = searchTerm.value.toLowerCase()
+      const matchesUser = (req.requestedByName || '').toLowerCase().includes(q) || (req.requestedBy || '').toLowerCase().includes(q)
+      const matchesDocType = formatDocType(req.documentType).toLowerCase().includes(q)
+      const matchesDocId = (req.documentReference || req.documentId || '').toLowerCase().includes(q)
+      if (!matchesUser && !matchesDocType && !matchesDocId) {
+        return false
+      }
+    }
+    // Doc Type filter
+    if (selectedDocType.value && req.documentType.toLowerCase() !== selectedDocType.value.toLowerCase()) {
+      return false
+    }
+    return true
+  })
+})
+
+const paginatedApprovals = computed(() => {
+  const start = (currentPage.value - 1) * perPage.value
+  const end = start + perPage.value
+  return filteredApprovals.value.slice(start, end)
+})
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredApprovals.value.length / perPage.value)
+})
+
+const paginationStart = computed(() => {
+  if (filteredApprovals.value.length === 0) return 0
+  return (currentPage.value - 1) * perPage.value + 1
+})
+
+const paginationEnd = computed(() => {
+  return Math.min(currentPage.value * perPage.value, filteredApprovals.value.length)
+})
+
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  const maxVisible = 5
+  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+  let end = Math.min(totalPages.value, start + maxVisible - 1)
+  
+  if (end - start + 1 < maxVisible) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  return pages
+})
+
+function applyFilters() {
+  currentPage.value = 1
+}
+
+function resetFilters() {
+  searchTerm.value = ''
+  selectedDocType.value = ''
+  currentPage.value = 1
+}
+
+function changePage(page: number) {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
 
 onMounted(async () => {
   await fetchPending()
   await loadAccounts()
+  await loadCustomers()
 })
 
 async function fetchPending() {
@@ -242,9 +459,25 @@ async function loadAccounts() {
   }
 }
 
+async function loadCustomers() {
+  const companyId = authStore.currentUser?.companyId
+  if (!companyId) return
+  try {
+    customers.value = await customerApi.listByCompany(companyId)
+  } catch (err: any) {
+    console.error('Failed to load customers map', err)
+  }
+}
+
 const accountsMap = computed(() => {
   const map = new Map<string, Account>()
   accounts.value.forEach(a => map.set(a.id, a))
+  return map
+})
+
+const customersMap = computed(() => {
+  const map = new Map<string, Customer>()
+  customers.value.forEach(c => map.set(c.id, c))
   return map
 })
 
@@ -253,18 +486,26 @@ function getAccountName(accountId: string): string {
   return acc ? `${acc.code} - ${acc.name}` : accountId
 }
 
+function getCustomerName(customerId: string): string {
+  const cust = customersMap.value.get(customerId)
+  return cust ? cust.name : customerId
+}
+
 // Open modal and fetch target details
 async function viewAndProcess(req: ApprovalRequest) {
   activeRequest.value = req
   comment.value = ''
   docLoadError.value = null
   journalDetails.value = null
+  invoiceDetails.value = null
   loadingDoc.value = true
   showProcessModal.value = true
 
   try {
     if (req.documentType === 'journal_entry') {
       journalDetails.value = await journalApi.getById(req.documentId)
+    } else if (req.documentType === 'sales_invoice') {
+      invoiceDetails.value = await invoiceApi.getSalesById(req.documentId)
     }
   } catch (err: any) {
     docLoadError.value = `Failed to retrieve target document details: ${err.message}`
@@ -277,6 +518,7 @@ function closeProcessModal() {
   showProcessModal.value = false
   activeRequest.value = null
   journalDetails.value = null
+  invoiceDetails.value = null
 }
 
 async function handleAction(action: 'approve' | 'reject') {
@@ -431,5 +673,29 @@ function formatCurrency(val: number): string {
   text-align: center;
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+/* Pagination Footer */
+.pagination-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding: 16px 24px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 6px;
 }
 </style>

@@ -15,6 +15,7 @@ pub trait JournalRepository: Send + Sync {
     ) -> Result<Vec<JournalEntry>, AppError>;
     async fn save(&self, entry: &JournalEntry) -> Result<(), AppError>;
     async fn update(&self, entry: &JournalEntry) -> Result<(), AppError>;
+    async fn delete(&self, id: Uuid) -> Result<(), AppError>;
     async fn save_lines(&self, lines: &[JournalLine]) -> Result<(), AppError>;
     async fn count_by_company(&self, company_id: Uuid) -> Result<i64, AppError>;
 }

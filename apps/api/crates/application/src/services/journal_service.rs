@@ -133,4 +133,69 @@ impl JournalService {
         self.journal_repo.update(&entry).await?;
         Ok(JournalResponse::from(entry))
     }
+
+    /// Update a draft journal entry.
+    pub async fn update_draft(
+        &self,
+        id: Uuid,
+        req: CreateJournalDraftRequest,
+    ) -> Result<JournalResponse, AppError> {
+        let mut entry = self.journal_repo.find_by_id(id).await?;
+        if entry.status != DocumentStatus::Draft {
+            return Err(AppError::Validation {
+                message: "Only draft journal entries can be updated".to_string(),
+            });
+        }
+
+        let lines: Vec<JournalLine> = req
+            .lines
+            .into_iter()
+            .enumerate()
+            .map(|(i, l)| JournalLine {
+                id: Uuid::new_v4(),
+                journal_entry_id: id,
+                account_id: l.account_id,
+                debit: l.debit,
+                credit: l.credit,
+                description: l.description,
+                sort_order: i as i32,
+            })
+            .collect();
+
+        journal_rules::validate_journal_balance(&lines)?;
+        journal_rules::validate_journal_line_sides(&lines)?;
+
+        entry.branch_id = req.branch_id;
+        if let Some(ref_num) = req.reference_number {
+            if !ref_num.trim().is_empty() {
+                entry.reference_number = ref_num;
+            }
+        }
+        entry.description = req.description;
+        entry.transaction_date = req.transaction_date;
+        entry.lines = lines;
+        entry.updated_at = time::OffsetDateTime::now_utc();
+
+        self.journal_repo.update(&entry).await?;
+
+        Ok(JournalResponse::from(entry))
+    }
+
+    /// Delete a draft journal entry.
+    pub async fn delete_journal(&self, id: Uuid) -> Result<(), AppError> {
+        let entry = self.journal_repo.find_by_id(id).await?;
+        if entry.status != DocumentStatus::Draft {
+            return Err(AppError::Validation {
+                message: "Only draft journal entries can be deleted".to_string(),
+            });
+        }
+        self.journal_repo.delete(id).await?;
+        Ok(())
+    }
+
+    /// Count journal entries for a company.
+    pub async fn count_journals(&self, company_id: Uuid) -> Result<i64, AppError> {
+        let count = self.journal_repo.count_by_company(company_id).await?;
+        Ok(count)
+    }
 }

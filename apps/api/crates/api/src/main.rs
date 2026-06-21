@@ -25,6 +25,7 @@ use finance_assistant_infra::{
         bank_account_repository::PgBankAccountRepository,
         tax_repository::PgTaxRepository,
         approval_repository::PgApprovalRepository,
+        invoice_repository::PgInvoiceRepository,
     },
 };
 use finance_assistant_app::services::{
@@ -32,6 +33,7 @@ use finance_assistant_app::services::{
     auth_service::AuthService,
     master_data_service::MasterDataService,
     approval_service::ApprovalService,
+    invoice_service::InvoiceService,
 };
 
 
@@ -67,10 +69,11 @@ async fn main() -> anyhow::Result<()> {
     let bank_account_repo = Arc::new(PgBankAccountRepository::new(pool.clone()));
     let tax_repo     = Arc::new(PgTaxRepository::new(pool.clone()));
     let approval_repo = Arc::new(PgApprovalRepository::new(pool.clone()));
+    let invoice_repo = Arc::new(PgInvoiceRepository::new(pool.clone()));
 
     let journal_svc  = Arc::new(JournalService::new(journal_repo.clone(), audit_repo.clone()));
     let auth_svc     = Arc::new(AuthService::new(
-        user_repo,
+        user_repo.clone(),
         cfg.jwt_secret.clone(),
         cfg.jwt_access_minutes,
         cfg.jwt_refresh_days,
@@ -78,16 +81,25 @@ async fn main() -> anyhow::Result<()> {
     let master_data_svc = Arc::new(MasterDataService::new(
         company_repo,
         branch_repo,
-        account_repo,
+        account_repo.clone(),
         customer_repo,
         supplier_repo,
         bank_account_repo,
-        tax_repo,
+        tax_repo.clone(),
+    ));
+    let invoice_svc = Arc::new(InvoiceService::new(
+        invoice_repo.clone(),
+        tax_repo.clone(),
+        journal_repo.clone(),
     ));
     let approval_svc = Arc::new(ApprovalService::new(
         approval_repo,
-        journal_repo,
+        journal_repo.clone(),
         audit_repo,
+        user_repo.clone(),
+        invoice_repo.clone(),
+        account_repo.clone(),
+        tax_repo.clone(),
     ));
 
     let app_state = state::AppState {
@@ -97,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
         auth_service: auth_svc,
         master_data_service: master_data_svc,
         approval_service: approval_svc,
+        invoice_service: invoice_svc,
     };
 
 

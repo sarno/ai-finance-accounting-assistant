@@ -74,14 +74,17 @@ pub async fn require_auth(
             request.extensions_mut().insert(AuthenticatedUser(user));
             next.run(request).await
         }
-        Err(_) => (
-            StatusCode::UNAUTHORIZED,
-            axum::Json(serde_json::json!({
-                "errorCode": "UNAUTHORIZED",
-                "message": "Invalid or expired token"
-            })),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!("JWT validation failed: {:?}", e);
+            (
+                StatusCode::UNAUTHORIZED,
+                axum::Json(serde_json::json!({
+                    "errorCode": "UNAUTHORIZED",
+                    "message": format!("Invalid or expired token: {}", e)
+                })),
+            )
+                .into_response()
+        }
     }
 }
 

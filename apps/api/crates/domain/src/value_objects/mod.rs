@@ -64,6 +64,7 @@ impl Default for CurrencyCode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "document_status", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum DocumentStatus {
     Draft,
     WaitingReview,

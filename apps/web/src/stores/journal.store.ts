@@ -46,6 +46,30 @@ export const useJournalStore = defineStore('journal', () => {
     }
   }
 
+  async function updateDraft(id: string, req: CreateJournalDraftRequest) {
+    loading.value = true
+    try {
+      const updated = await journalApi.updateDraft(id, req)
+      const idx = journals.value.findIndex(j => j.id === id)
+      if (idx !== -1) {
+        journals.value[idx] = updated
+      }
+      return updated
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function deleteDraft(id: string) {
+    loading.value = true
+    try {
+      await journalApi.deleteDraft(id)
+      journals.value = journals.value.filter(j => j.id !== id)
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function submitForApproval(id: string) {
     await journalApi.submitApproval(id)
     const idx = journals.value.findIndex(j => j.id === id)
@@ -65,6 +89,6 @@ export const useJournalStore = defineStore('journal', () => {
   return {
     journals, selectedJournal, loading, error, total, filters,
     draftJournals, postedJournals,
-    fetchJournals, createDraft, submitForApproval, postJournal, setFilters,
+    fetchJournals, createDraft, updateDraft, deleteDraft, submitForApproval, postJournal, setFilters,
   }
 })

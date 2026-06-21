@@ -1,6 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
-    response::Json,
+    response::{Json, IntoResponse},
+    http::HeaderMap,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -51,26 +52,32 @@ pub async fn list_journals(
     State(state): State<Arc<AppState>>,
     AuthenticatedUser(user): AuthenticatedUser,
     Query(params): Query<ListJournalsParams>,
-) -> Result<Json<Vec<JournalResponse>>, ApiError> {
+) -> Result<impl IntoResponse, ApiError> {
     let company_id = params.company_id.unwrap_or(user.company_id);
     let page = params.page.unwrap_or(1);
     let per_page = params.per_page.unwrap_or(20);
 
+    let total = state.journal_service.count_journals(company_id).await?;
     let response = state
         .journal_service
         .list_journals(company_id, page, per_page)
         .await?;
 
-    Ok(Json(response))
+    let mut headers = HeaderMap::new();
+    headers.insert("x-total-count", total.to_string().parse().unwrap());
+    headers.insert("access-control-expose-headers", "x-total-count".parse().unwrap());
+
+    Ok((headers, Json(response)))
 }
 
 /// POST /api/journals/:id/submit — submit draft for approval.
 pub async fn submit_approval(
     State(state): State<Arc<AppState>>,
-    _user: AuthenticatedUser,
+    AuthenticatedUser(user): AuthenticatedUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<JournalResponse>, ApiError> {
-    let response = state.journal_service.submit_approval(id).await?;
+    state.approval_service.submit_journal_approval(id, user.id).await?;
+    let response = state.journal_service.get_journal(id).await?;
     Ok(Json(response))
 }
 
@@ -92,4 +99,32 @@ pub async fn approve_journal(
 ) -> Result<Json<JournalResponse>, ApiError> {
     let response = state.journal_service.approve_journal(id).await?;
     Ok(Json(response))
+}
+
+/// PUT /api/journals/:id
+/// Update a draft journal entry.
+pub async fn update_journal(
+    State(state): State<Arc<AppState>>,
+    _user: AuthenticatedUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<JournalResponse>, ApiError> {
+    let req: CreateJournalDraftRequest = serde_json::from_value(body)
+        .map_err(|e| ApiError(finance_assistant_app::errors::AppError::Validation { message: format!("JSON parse error: {}", e) }))?;
+    let response = state
+        .journal_service
+        .update_draft(id, req)
+        .await?;
+    Ok(Json(response))
+}
+
+/// DELETE /api/journals/:id
+/// Delete a draft journal entry.
+pub async fn delete_journal(
+    State(state): State<Arc<AppState>>,
+    _user: AuthenticatedUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    state.journal_service.delete_journal(id).await?;
+    Ok(Json(serde_json::json!({ "success": true })))
 }

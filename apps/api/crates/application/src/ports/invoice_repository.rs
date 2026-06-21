@@ -13,8 +13,11 @@ use crate::errors::AppError;
 #[async_trait]
 pub trait InvoiceRepository: Send + Sync {
     async fn find_sales_by_id(&self, id: Uuid) -> Result<SalesInvoice, AppError>;
+    async fn find_sales_by_company(&self, company_id: Uuid, page: u32, per_page: u32) -> Result<Vec<SalesInvoice>, AppError>;
+    async fn count_sales_by_company(&self, company_id: Uuid) -> Result<u64, AppError>;
     async fn save_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError>;
     async fn update_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError>;
+    async fn delete_sales(&self, id: Uuid) -> Result<(), AppError>;
     async fn find_purchase_by_id(&self, id: Uuid) -> Result<PurchaseInvoice, AppError>;
     async fn save_purchase(&self, invoice: &PurchaseInvoice) -> Result<(), AppError>;
     async fn update_purchase(&self, invoice: &PurchaseInvoice) -> Result<(), AppError>;

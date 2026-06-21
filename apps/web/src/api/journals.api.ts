@@ -27,6 +27,15 @@ export const journalApi = {
     return data
   },
 
+  updateDraft: async (id: string, req: CreateJournalDraftRequest): Promise<JournalEntry> => {
+    const { data } = await client.put<JournalEntry>(`/journals/${id}`, req)
+    return data
+  },
+
+  deleteDraft: async (id: string): Promise<void> => {
+    await client.delete(`/journals/${id}`)
+  },
+
   submitApproval: async (id: string): Promise<void> => {
     await client.post(`/journals/${id}/submit`)
   },

@@ -13,7 +13,7 @@ use tower_http::{
 use std::time::Duration;
 
 use crate::{
-    handlers::{auth, health, journals, reports, master_data, approvals},
+    handlers::{auth, health, journals, reports, master_data, approvals, invoices},
     middleware::auth_middleware,
     state::AppState,
 };
@@ -39,10 +39,15 @@ pub fn build(state: AppState) -> Router {
         // Journals
         .route("/api/journals",              get(journals::list_journals))
         .route("/api/journals/draft",        post(journals::create_draft))
-        .route("/api/journals/:id",          get(journals::get_journal))
+        .route("/api/journals/:id",          get(journals::get_journal).put(journals::update_journal).delete(journals::delete_journal))
         .route("/api/journals/:id/submit",   post(journals::submit_approval))
         .route("/api/journals/:id/post",     post(journals::post_journal))
         .route("/api/journals/:id/approve",  post(journals::approve_journal))
+        // Sales Invoices
+        .route("/api/sales-invoices",              get(invoices::list_sales_invoices))
+        .route("/api/sales-invoices/draft",        post(invoices::create_sales_draft))
+        .route("/api/sales-invoices/:id",          get(invoices::get_sales_invoice).put(invoices::update_sales_invoice).delete(invoices::delete_sales_invoice))
+        .route("/api/sales-invoices/:id/submit",   post(invoices::submit_approval))
         // Reports
         .route("/api/reports/cash-position",    get(reports::cash_position))
         .route("/api/reports/profit-loss",      get(reports::profit_loss))

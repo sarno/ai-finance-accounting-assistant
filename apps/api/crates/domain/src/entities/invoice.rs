@@ -14,6 +14,7 @@ use crate::{
 pub struct SalesInvoice {
     pub id: Uuid,
     pub company_id: Uuid,
+    pub branch_id: Option<Uuid>,
     pub invoice_number: String,
     pub customer_id: Uuid,
     pub invoice_date: time::Date,
@@ -36,6 +37,7 @@ pub struct SalesInvoice {
 pub struct PurchaseInvoice {
     pub id: Uuid,
     pub company_id: Uuid,
+    pub branch_id: Option<Uuid>,
     pub supplier_invoice_number: String,
     pub internal_reference: String,
     pub supplier_id: Uuid,

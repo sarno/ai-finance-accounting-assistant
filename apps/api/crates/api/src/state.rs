@@ -6,6 +6,7 @@ use finance_assistant_app::services::{
     auth_service::AuthService,
     master_data_service::MasterDataService,
     approval_service::ApprovalService,
+    invoice_service::InvoiceService,
 };
 
 use crate::config::AppConfig;
@@ -19,5 +20,6 @@ pub struct AppState {
     pub auth_service: Arc<AuthService>,
     pub master_data_service: Arc<MasterDataService>,
     pub approval_service: Arc<ApprovalService>,
+    pub invoice_service: Arc<InvoiceService>,
 }
 

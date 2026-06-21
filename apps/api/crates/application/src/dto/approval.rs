@@ -30,6 +30,8 @@ pub struct ApprovalResponse {
     pub document_id: Uuid,
     pub status: String,
     pub requested_by: Uuid,
+    pub requested_by_name: Option<String>,
+    pub document_reference: Option<String>,
     pub reviewed_by: Option<Uuid>,
     #[serde(with = "crate::dto::option_datetime_format")]
     pub reviewed_at: Option<time::OffsetDateTime>,
@@ -51,6 +53,8 @@ impl From<DomainApprovalRequest> for ApprovalResponse {
             document_id: r.document_id,
             status: r.status.as_str().to_string(),
             requested_by: r.requested_by,
+            requested_by_name: None,
+            document_reference: None,
             reviewed_by: r.reviewed_by,
             reviewed_at: r.reviewed_at,
             comment: r.comment,

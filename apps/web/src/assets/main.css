@@ -82,7 +82,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Navigation / Sidebar Layout */
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -93,6 +94,15 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+}
+
+.main-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  height: 100vh;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .main-content {

@@ -253,14 +253,22 @@ impl JournalRepository for PgJournalRepository {
         sqlx::query(
             r#"
             UPDATE journal_entries
-            SET status = $2::document_status,
-                posted_by = $3,
-                posted_at = $4,
-                updated_at = $5
+            SET branch_id = $2,
+                reference_number = $3,
+                description = $4,
+                transaction_date = $5,
+                status = $6::document_status,
+                posted_by = $7,
+                posted_at = $8,
+                updated_at = $9
             WHERE id = $1
             "#,
         )
         .bind(entry.id)
+        .bind(entry.branch_id)
+        .bind(&entry.reference_number)
+        .bind(&entry.description)
+        .bind(entry.transaction_date)
         .bind(entry.status.clone())
         .bind(entry.posted_by)
         .bind(entry.posted_at)
@@ -299,6 +307,35 @@ impl JournalRepository for PgJournalRepository {
             .await
             .map_err(|e| AppError::Internal(e.into()))?;
         }
+
+        tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
+        Ok(())
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), AppError> {
+        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.into()))?;
+
+        sqlx::query(
+            r#"
+            DELETE FROM journal_lines
+            WHERE journal_entry_id = $1
+            "#,
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?;
+
+        sqlx::query(
+            r#"
+            DELETE FROM journal_entries
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?;
 
         tx.commit().await.map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
