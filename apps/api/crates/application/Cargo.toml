@@ -1,0 +1,20 @@
+[package]
+name        = "finance_assistant_app"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+finance_assistant_domain = { path = "../domain" }
+
+tokio       = { workspace = true }
+serde       = { workspace = true }
+uuid        = { workspace = true }
+time        = { workspace = true }
+rust_decimal = { workspace = true }
+thiserror   = { workspace = true }
+anyhow      = { workspace = true }
+async-trait = { workspace = true }
+tracing     = { workspace = true }
+argon2      = { workspace = true }
+password-hash = { workspace = true }
+jsonwebtoken = { workspace = true }

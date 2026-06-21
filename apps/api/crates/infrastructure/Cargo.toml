@@ -1,0 +1,22 @@
+[package]
+name        = "finance_assistant_infra"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+finance_assistant_domain = { path = "../domain" }
+finance_assistant_app    = { path = "../application" }
+
+tokio       = { workspace = true }
+sqlx        = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+uuid        = { workspace = true }
+time        = { workspace = true }
+rust_decimal = { workspace = true }
+reqwest     = { workspace = true }
+async-trait = { workspace = true }
+thiserror   = { workspace = true }
+anyhow      = { workspace = true }
+tracing     = { workspace = true }
+bytes       = { workspace = true }

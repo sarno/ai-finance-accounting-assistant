@@ -1,0 +1,33 @@
+[package]
+name        = "finance_assistant_api"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "api"
+path = "src/main.rs"
+
+[dependencies]
+finance_assistant_domain = { path = "../domain" }
+finance_assistant_app    = { path = "../application" }
+finance_assistant_infra  = { path = "../infrastructure" }
+
+tokio       = { workspace = true }
+axum        = { workspace = true }
+axum-extra  = { workspace = true }
+tower       = { workspace = true }
+tower-http  = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+uuid        = { workspace = true }
+time        = { workspace = true }
+rust_decimal = { workspace = true }
+sqlx        = { workspace = true }
+jsonwebtoken = { workspace = true }
+thiserror   = { workspace = true }
+anyhow      = { workspace = true }
+tracing     = { workspace = true }
+tracing-subscriber = { workspace = true }
+config      = { workspace = true }
+dotenvy     = { workspace = true }
+validator   = { workspace = true }

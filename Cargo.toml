@@ -1,0 +1,81 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/api/crates/api",
+    "apps/api/crates/application",
+    "apps/api/crates/domain",
+    "apps/api/crates/infrastructure",
+    "apps/api/crates/worker",
+]
+
+[workspace.package]
+version     = "0.1.0"
+edition     = "2021"
+authors     = ["AI Finance Team"]
+license     = "MIT"
+rust-version = "1.78"
+
+# ─── Shared dependency versions ──────────────────────────────────────────────
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum        = { version = "0.7", features = ["macros", "multipart"] }
+axum-extra  = { version = "0.9", features = ["typed-header"] }
+tower       = { version = "0.4" }
+tower-http  = { version = "0.5", features = ["cors", "trace", "request-id", "timeout"] }
+
+# Serialization
+serde       = { version = "1", features = ["derive"] }
+serde_json  = { version = "1" }
+
+# Database
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-rustls", "uuid", "time", "rust_decimal", "migrate"] }
+
+# Decimal for money
+rust_decimal            = { version = "1", features = ["serde-with-str"] }
+rust_decimal_macros     = { version = "1" }
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Time
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+
+# Password hashing
+argon2      = { version = "0.5" }
+password-hash = { version = "0.5", features = ["rand_core"] }
+
+# JWT
+jsonwebtoken = { version = "9" }
+
+# HTTP client (for OpenAI, OpenClaw, OCR)
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# Error handling
+thiserror   = { version = "1" }
+anyhow      = { version = "1" }
+
+# Tracing / Logging
+tracing             = { version = "0.1" }
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json"] }
+
+# Config
+config = { version = "0.14" }
+dotenvy = { version = "0.15" }
+
+# Misc
+rand = { version = "0.8" }
+bytes = { version = "1" }
+async-trait = { version = "0.1" }
+derive_more = { version = "0.99" }
+
+[profile.release]
+opt-level = 3
+lto       = true
+codegen-units = 1
+strip     = true

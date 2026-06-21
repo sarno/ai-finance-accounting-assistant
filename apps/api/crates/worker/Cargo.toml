@@ -1,0 +1,19 @@
+[package]
+name        = "finance_assistant_worker"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "worker"
+path = "src/main.rs"
+
+[dependencies]
+finance_assistant_app    = { path = "../application" }
+finance_assistant_infra  = { path = "../infrastructure" }
+
+tokio       = { workspace = true }
+tracing     = { workspace = true }
+tracing-subscriber = { workspace = true }
+dotenvy     = { workspace = true }
+anyhow      = { workspace = true }
+sqlx        = { workspace = true }

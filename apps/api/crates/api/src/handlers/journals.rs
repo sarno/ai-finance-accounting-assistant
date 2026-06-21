@@ -1,0 +1,95 @@
+use axum::{
+    extract::{Path, Query, State},
+    response::Json,
+};
+use std::sync::Arc;
+use uuid::Uuid;
+
+use finance_assistant_app::dto::journal::{CreateJournalDraftRequest, JournalResponse};
+use crate::{errors::*, middleware::auth_middleware::AuthenticatedUser, state::AppState};
+
+#[derive(serde::Deserialize)]
+pub struct ListJournalsParams {
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+    pub company_id: Option<Uuid>,
+}
+
+/// POST /api/journals/draft
+/// Create a draft journal entry (manual or from AI suggestion).
+pub async fn create_draft(
+    State(state): State<Arc<AppState>>,
+    AuthenticatedUser(user): AuthenticatedUser,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<JournalResponse>, ApiError> {
+    println!("Create draft raw JSON: {}", body);
+    let req: CreateJournalDraftRequest = serde_json::from_value(body)
+        .map_err(|e| ApiError(finance_assistant_app::errors::AppError::Validation { message: format!("JSON parse error: {}", e) }))?;
+    println!("Create draft parsed struct: {:?}", req);
+    let response = state
+        .journal_service
+        .create_draft(req, user.id)
+        .await?;
+
+    Ok(Json(response))
+}
+
+/// GET /api/journals/:id
+/// Retrieve a single journal entry by ID.
+pub async fn get_journal(
+    State(state): State<Arc<AppState>>,
+    _user: AuthenticatedUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<JournalResponse>, ApiError> {
+    let response = state.journal_service.get_journal(id).await?;
+    Ok(Json(response))
+}
+
+/// GET /api/journals
+/// List journal entries for the company.
+pub async fn list_journals(
+    State(state): State<Arc<AppState>>,
+    AuthenticatedUser(user): AuthenticatedUser,
+    Query(params): Query<ListJournalsParams>,
+) -> Result<Json<Vec<JournalResponse>>, ApiError> {
+    let company_id = params.company_id.unwrap_or(user.company_id);
+    let page = params.page.unwrap_or(1);
+    let per_page = params.per_page.unwrap_or(20);
+
+    let response = state
+        .journal_service
+        .list_journals(company_id, page, per_page)
+        .await?;
+
+    Ok(Json(response))
+}
+
+/// POST /api/journals/:id/submit — submit draft for approval.
+pub async fn submit_approval(
+    State(state): State<Arc<AppState>>,
+    _user: AuthenticatedUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<JournalResponse>, ApiError> {
+    let response = state.journal_service.submit_approval(id).await?;
+    Ok(Json(response))
+}
+
+/// POST /api/journals/:id/post — post approved journal.
+pub async fn post_journal(
+    State(state): State<Arc<AppState>>,
+    AuthenticatedUser(user): AuthenticatedUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<JournalResponse>, ApiError> {
+    let response = state.journal_service.post_journal(id, user.id).await?;
+    Ok(Json(response))
+}
+
+/// POST /api/journals/:id/approve — direct approve journal (helper/testing).
+pub async fn approve_journal(
+    State(state): State<Arc<AppState>>,
+    _user: AuthenticatedUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<JournalResponse>, ApiError> {
+    let response = state.journal_service.approve_journal(id).await?;
+    Ok(Json(response))
+}
