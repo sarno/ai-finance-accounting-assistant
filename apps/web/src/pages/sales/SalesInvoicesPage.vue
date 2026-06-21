@@ -92,7 +92,7 @@
             </td>
             <td style="position: relative; width: 80px; text-align: center;">
               <div class="row-actions-container">
-                <button class="btn-actions-trigger" @click.stop="toggleRowDropdown(invoice.id)">
+                <button class="btn-actions-trigger" @click="toggleRowDropdown(invoice.id, $event)">
                   <svg class="actions-trigger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="1.5" />
                     <circle cx="19" cy="12" r="1.5" />
@@ -190,7 +190,15 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Invoice Number *</label>
-                <input v-model="form.invoiceNumber" type="text" class="form-input" placeholder="INV/2026/001" required />
+                <input
+                  v-model="form.invoiceNumber"
+                  type="text"
+                  class="form-input"
+                  placeholder="INV/2026/001"
+                  :readonly="!isEdit"
+                  required
+                />
+                <small v-if="!isEdit" class="form-help-text">Auto-generated from invoice year and sequence.</small>
               </div>
               <div class="form-group">
                 <label class="form-label">Customer *</label>
@@ -232,75 +240,121 @@
                 <button type="button" class="btn btn-secondary btn-sm" @click="addLine">+ Add Item Line</button>
               </div>
 
-              <div class="table-container invoice-lines-table-container" style="overflow: visible !important;">
-                <table class="invoice-lines-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 18%;">Item *</th>
-                      <th style="width: 24%;">Item Description *</th>
-                      <th style="width: 10%; text-align: right;">Quantity *</th>
-                      <th style="width: 14%; text-align: right;">Unit Price *</th>
-                      <th style="width: 10%; text-align: right;">Discount</th>
-                      <th style="width: 10%;">Tax Rate</th>
-                      <th style="width: 16%;">Revenue Account *</th>
-                      <th style="width: 5%;"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(line, index) in form.lines" :key="index">
-                      <td>
-                        <SearchableDropdown
-                          v-model="line.itemId"
-                          :options="items"
-                          placeholder="Search and select item..."
-                          no-results-text="No items found"
-                          size="sm"
-                          container-class="custom-select-search-container"
-                          :get-option-key="(item) => item.id"
-                          :get-option-label="(item) => `${item.code} - ${item.name}`"
-                          :get-option-search-text="(item) => `${item.code} ${item.name} ${item.description || ''}`"
-                          @select="selectLineItem(line, $event)"
+              <div class="invoice-lines-list">
+                <div v-if="form.lines.length === 0" class="empty-state invoice-lines-empty">
+                  No lines added. Click "+ Add Item Line" to add invoice items.
+                </div>
+
+                <div v-for="(line, index) in form.lines" :key="index" class="invoice-line-card">
+                  <div class="invoice-line-header">
+                    <div>
+                      <p class="invoice-line-title">Line {{ index + 1 }}</p>
+                      <p class="invoice-line-subtitle">
+                        {{ line.itemId ? getItemLabel(line.itemId) : 'Select an item to start' }}
+                      </p>
+                    </div>
+                    <div class="invoice-line-header-actions">
+                      <div class="invoice-line-total">
+                        <span class="invoice-line-total-label">Line Total</span>
+                        <span class="invoice-line-total-value">{{ formatCurrency(getLineTotal(line)) }}</span>
+                      </div>
+                      <button type="button" class="invoice-line-toggle" @click="toggleLineExpanded(line)">
+                        {{ line.isExpanded ? 'Collapse' : 'Expand' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-show="line.isExpanded" class="invoice-line-body">
+                    <div class="invoice-line-top">
+                    <div class="invoice-line-field invoice-line-field-item">
+                      <label class="invoice-line-label">Item *</label>
+                      <SearchableDropdown
+                        v-model="line.itemId"
+                        :options="items"
+                        placeholder="Search and select item..."
+                        no-results-text="No items found"
+                        size="sm"
+                        container-class="custom-select-search-container"
+                        :get-option-key="(item) => item.id"
+                        :get-option-label="(item) => `${item.code} - ${item.name}`"
+                        :get-option-search-text="(item) => `${item.code} ${item.name} ${item.description || ''}`"
+                        @select="selectLineItem(line, $event)"
+                      />
+                    </div>
+
+                    <div class="invoice-line-field invoice-line-field-description">
+                      <label class="invoice-line-label">Item Description *</label>
+                      <input v-model="line.description" type="text" class="form-input form-input-sm" placeholder="Description of goods/services" required />
+                    </div>
+
+                    <div class="invoice-line-field invoice-line-field-account">
+                      <label class="invoice-line-label">Revenue Account *</label>
+                      <select v-model="line.accountId" class="form-select form-select-sm" required>
+                        <option value="">Select Account</option>
+                        <option v-for="a in revenueAccounts" :key="a.id" :value="a.id">
+                          {{ a.code }} - {{ a.name }}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="invoice-line-bottom">
+                    <div class="invoice-line-field invoice-line-field-qty">
+                      <label class="invoice-line-label">Quantity *</label>
+                      <div class="quantity-control">
+                        <button
+                          type="button"
+                          class="quantity-control-btn"
+                          aria-label="Decrease quantity"
+                          @click="adjustQuantity(line, -1)"
+                        >
+                          −
+                        </button>
+                        <input
+                          v-model.number="line.quantity"
+                          type="text"
+                          inputmode="decimal"
+                          class="form-input form-input-sm quantity-control-input"
+                          required
                         />
-                      </td>
-                      <td>
-                        <input v-model="line.description" type="text" class="form-input form-input-sm" placeholder="Description of goods/services" required />
-                      </td>
-                      <td class="numeric-cell">
-                        <input v-model.number="line.quantity" type="number" step="any" min="0.0001" class="form-input form-input-sm numeric-input" required />
-                      </td>
-                      <td class="numeric-cell">
-                        <input v-model.number="line.unitPrice" type="number" step="any" min="0" class="form-input form-input-sm numeric-input" required />
-                      </td>
-                      <td class="numeric-cell">
-                        <input v-model.number="line.discountAmount" type="number" step="any" min="0" class="form-input form-input-sm numeric-input" />
-                      </td>
-                      <td>
-                        <select v-model="line.taxTypeId" class="form-select form-select-sm">
-                          <option value="">No Tax (0%)</option>
-                          <option v-for="t in taxTypes" :key="t.id" :value="t.id">
-                            {{ t.name }} ({{ (Number(t.defaultRate) * 100).toFixed(0) }}%)
-                          </option>
-                        </select>
-                      </td>
-                      <td class="revenue-account-cell">
-                        <select v-model="line.accountId" class="form-select form-select-sm" required>
-                          <option value="">Select Account</option>
-                          <option v-for="a in revenueAccounts" :key="a.id" :value="a.id">
-                            {{ a.code }} - {{ a.name }}
-                          </option>
-                        </select>
-                      </td>
-                      <td style="text-align: center;">
-                        <button type="button" class="btn-delete-row" @click="removeLine(index)">&times;</button>
-                      </td>
-                    </tr>
-                  <tr v-if="form.lines.length === 0">
-                      <td colspan="8" class="empty-state" style="padding: 16px;">
-                        No lines added. Click "+ Add Item Line" to add invoice items.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                        <button
+                          type="button"
+                          class="quantity-control-btn"
+                          aria-label="Increase quantity"
+                          @click="adjustQuantity(line, 1)"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="invoice-line-field invoice-line-field-price">
+                      <label class="invoice-line-label">Unit Price *</label>
+                      <input v-model.number="line.unitPrice" type="number" step="any" min="0" class="form-input form-input-sm numeric-input" required />
+                    </div>
+
+                    <div class="invoice-line-field invoice-line-field-discount">
+                      <label class="invoice-line-label">Discount</label>
+                      <input v-model.number="line.discountAmount" type="number" step="any" min="0" class="form-input form-input-sm numeric-input" />
+                    </div>
+
+                    <div class="invoice-line-field invoice-line-field-tax">
+                      <label class="invoice-line-label">Tax Rate</label>
+                      <select v-model="line.taxTypeId" class="form-select form-select-sm">
+                        <option value="">No Tax (0%)</option>
+                        <option v-for="t in taxTypes" :key="t.id" :value="t.id">
+                          {{ t.name }} ({{ (Number(t.defaultRate) * 100).toFixed(0) }}%)
+                        </option>
+                      </select>
+                    </div>
+
+                    <div class="invoice-line-field invoice-line-field-actions">
+                      <label class="invoice-line-label">&nbsp;</label>
+                      <button type="button" class="btn-delete-row" @click="removeLine(index)">&times;</button>
+                    </div>
+                  </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -404,7 +458,7 @@
                     <td>{{ getItemLabel(line.itemId) || line.description }}</td>
                     <td>{{ line.description }}</td>
                     <td>{{ getAccountName(line.accountId) }}</td>
-                    <td style="text-align: right;">{{ line.quantity }}</td>
+                    <td style="text-align: right;">{{ formatQuantity(line.quantity) }}</td>
                     <td style="text-align: right;">{{ formatCurrency(line.unitPrice) }}</td>
                     <td style="text-align: right;">{{ line.discountAmount > 0 ? formatCurrency(line.discountAmount) : '-' }}</td>
                     <td style="text-align: right;">{{ line.taxRate ? `${(Number(line.taxRate) * 100).toFixed(0)}%` : '-' }}</td>
@@ -437,8 +491,26 @@
           <button
             v-if="selectedInvoice.status === 'draft' || selectedInvoice.status === 'rejected'"
             type="button"
+            class="btn btn-secondary"
+            style="background: #e2e8f0; color: var(--text-primary);"
+            @click="editFromDetail"
+          >
+            ✏️ Edit Draft
+          </button>
+          <button
+            v-if="selectedInvoice.status === 'draft' || selectedInvoice.status === 'rejected'"
+            type="button"
+            class="btn btn-danger"
+            @click="deleteFromDetail"
+          >
+            🗑️ Delete Draft
+          </button>
+          <button
+            v-if="selectedInvoice.status === 'draft' || selectedInvoice.status === 'rejected'"
+            type="button"
             class="btn btn-primary"
-            @click="submitApproval(selectedInvoice.id); closeDetailModal();"
+            style="background-color: var(--info-bg); color: var(--info); border: 1px solid rgba(59, 130, 246, 0.15);"
+            @click="submitApprovalFromDetail"
           >
             Submit for Approval
           </button>
@@ -461,7 +533,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import MainLayout from '@/components/MainLayout.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SearchableDropdown from '@/components/SearchableDropdown.vue'
@@ -512,6 +584,7 @@ const form = ref({
   notes: '',
   lines: [] as Array<{
     itemId: string
+    isExpanded: boolean
     description: string
     quantity: number
     unitPrice: number
@@ -598,6 +671,18 @@ function getItemLabel(id?: string): string {
   return item ? `${item.code} - ${item.name}` : id
 }
 
+function generateInvoiceNumber(dateValue: string): string {
+  const year = new Date(dateValue || new Date().toISOString()).getFullYear()
+  const prefix = `INV/${year}/`
+  const nextSequence = invoiceStore.invoices.reduce((max, invoice) => {
+    if (!invoice.invoiceNumber.startsWith(prefix)) return max
+    const suffix = invoice.invoiceNumber.slice(prefix.length)
+    const parsed = Number.parseInt(suffix, 10)
+    return Number.isFinite(parsed) ? Math.max(max, parsed) : max
+  }, 0) + 1
+  return `${prefix}${String(nextSequence).padStart(3, '0')}`
+}
+
 function handleCustomerSelect(customer: Customer) {
   form.value.customerId = customer.id
 }
@@ -668,7 +753,8 @@ function resetFilters() {
 }
 
 // Action dropdown logic
-function toggleRowDropdown(id: string) {
+function toggleRowDropdown(id: string, event?: Event) {
+  event?.stopPropagation()
   if (activeDropdownId.value === id) activeDropdownId.value = null
   else activeDropdownId.value = id
 }
@@ -679,13 +765,14 @@ function openCreateModal() {
   targetEditId.value = null
   form.value = {
     branchId: branches.value[0]?.id || '',
-    invoiceNumber: `INV/${new Date().getFullYear()}/${String(invoiceStore.invoices.length + 1).padStart(3, '0')}`,
+    invoiceNumber: '',
     customerId: '',
     invoiceDate: new Date().toISOString().substring(0, 10),
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10), // default Net 30
     notes: '',
     lines: []
   }
+  form.value.invoiceNumber = generateInvoiceNumber(form.value.invoiceDate)
   addLine()
   showFormModal.value = true
 }
@@ -703,6 +790,7 @@ function openEditModal(invoice: SalesInvoice) {
     notes: invoice.notes || '',
     lines: invoice.lines.map(line => ({
       itemId: line.itemId || '',
+      isExpanded: true,
       description: line.description,
       quantity: Number(line.quantity),
       unitPrice: Number(line.unitPrice),
@@ -718,10 +806,19 @@ function closeFormModal() {
   showFormModal.value = false
 }
 
+watch(
+  () => form.value.invoiceDate,
+  (newDate) => {
+    if (!showFormModal.value || isEdit.value) return
+    form.value.invoiceNumber = generateInvoiceNumber(newDate)
+  },
+)
+
 function addLine() {
   const defaultAccount = accounts.value.find(a => a.code === '4000' || a.accountType === 'Revenue')
   form.value.lines.push({
     itemId: '',
+    isExpanded: true,
     description: '',
     quantity: 1,
     unitPrice: 0,
@@ -734,6 +831,7 @@ function addLine() {
 function selectLineItem(
   line: {
     itemId: string
+    isExpanded?: boolean
     description: string
     unitPrice: number
     taxTypeId: string
@@ -752,6 +850,16 @@ function selectLineItem(
   }
 }
 
+function toggleLineExpanded(line: { isExpanded?: boolean }) {
+  line.isExpanded = !line.isExpanded
+}
+
+function adjustQuantity(line: { quantity: number }, delta: number) {
+  const current = Number(line.quantity)
+  const base = Number.isFinite(current) ? Math.trunc(current) : 0
+  line.quantity = Math.max(1, base + delta)
+}
+
 function removeLine(index: number) {
   form.value.lines.splice(index, 1)
 }
@@ -760,6 +868,12 @@ function getTaxRate(taxTypeId: string): number {
   if (!taxTypeId) return 0
   const tax = taxTypes.value.find(t => t.id === taxTypeId)
   return tax ? Number(tax.defaultRate) : 0
+}
+
+function getLineTotal(line: { quantity: number; unitPrice: number; discountAmount: number; taxTypeId: string }) {
+  const net = line.quantity * line.unitPrice - line.discountAmount
+  const tax = net * getTaxRate(line.taxTypeId)
+  return net + tax
 }
 
 // Summary computations
@@ -781,6 +895,13 @@ const computedTotalAmount = computed(() => computedSubtotal.value + computedTaxA
 async function saveDraft() {
   const companyId = authStore.currentUser?.companyId
   if (!companyId) return
+
+  const validationError = validateDraftForm()
+  if (validationError) {
+    errorMsg.value = validationError
+    return
+  }
+
   submitting.value = true
   errorMsg.value = null
   successMsg.value = null
@@ -820,6 +941,44 @@ async function saveDraft() {
   } finally {
     submitting.value = false
   }
+}
+
+function validateDraftForm(): string | null {
+  if (!form.value.customerId) {
+    return 'Customer is required before saving the invoice draft.'
+  }
+
+  if (!form.value.invoiceDate) {
+    return 'Invoice date is required.'
+  }
+
+  if (!form.value.dueDate) {
+    return 'Due date is required.'
+  }
+
+  if (form.value.lines.length === 0) {
+    return 'Add at least one invoice line.'
+  }
+
+  for (const [index, line] of form.value.lines.entries()) {
+    if (!line.description.trim()) {
+      return `Line ${index + 1}: description is required.`
+    }
+    if (!line.accountId) {
+      return `Line ${index + 1}: revenue account is required.`
+    }
+    if (!Number.isFinite(line.quantity) || line.quantity <= 0) {
+      return `Line ${index + 1}: quantity must be greater than 0.`
+    }
+    if (!Number.isFinite(line.unitPrice) || line.unitPrice < 0) {
+      return `Line ${index + 1}: unit price must be 0 or greater.`
+    }
+    if (!Number.isFinite(line.discountAmount) || line.discountAmount < 0) {
+      return `Line ${index + 1}: discount must be 0 or greater.`
+    }
+  }
+
+  return null
 }
 
 // Delete action triggers
@@ -868,6 +1027,24 @@ function closeDetailModal() {
   selectedInvoice.value = null
 }
 
+function editFromDetail() {
+  if (!selectedInvoice.value) return
+  openEditModal(selectedInvoice.value)
+  closeDetailModal()
+}
+
+function deleteFromDetail() {
+  if (!selectedInvoice.value) return
+  confirmDelete(selectedInvoice.value.id)
+  closeDetailModal()
+}
+
+async function submitApprovalFromDetail() {
+  if (!selectedInvoice.value) return
+  await submitApproval(selectedInvoice.value.id)
+  closeDetailModal()
+}
+
 // Utility styling methods
 function getStatusBadgeClass(status: string): string {
   const s = status.toLowerCase()
@@ -898,12 +1075,108 @@ function formatCurrency(val: number): string {
     minimumFractionDigits: 0
   }).format(val)
 }
+
+function formatQuantity(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '-'
+
+  const numeric = typeof value === 'string' ? Number(value) : value
+  if (!Number.isFinite(numeric)) return '-'
+
+  const rounded = Number(numeric.toFixed(4))
+  return Number.isInteger(rounded) ? `${rounded}` : `${rounded}`
+}
 </script>
 
 <style scoped>
 .modal-lg-custom {
   max-width: 1180px;
   width: min(1180px, calc(100vw - 32px));
+}
+
+.table-container {
+  overflow: visible !important;
+}
+
+.row-actions-container {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-actions-trigger {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.btn-actions-trigger:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.actions-trigger-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.row-actions-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 180px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  padding: 6px;
+  transform-origin: top right;
+}
+
+.row-actions-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 0.825rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.row-actions-dropdown .dropdown-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.row-actions-dropdown .dropdown-item.text-danger {
+  color: var(--danger);
+}
+
+.row-actions-dropdown .dropdown-item.text-danger:hover {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+}
+
+.row-actions-dropdown .dropdown-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 6px 0;
 }
 
 .form-grid-3 {
@@ -918,31 +1191,209 @@ function formatCurrency(val: number): string {
   gap: 16px;
 }
 
-.invoice-lines-table-container {
-  overflow-x: auto;
+.form-help-text {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
 }
 
-.invoice-lines-table {
-  min-width: 1200px;
+.invoice-lines-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.invoice-lines-table th,
-.invoice-lines-table td {
-  vertical-align: middle;
+.invoice-lines-empty {
+  margin-top: 4px;
 }
 
-.numeric-cell {
-  min-width: 130px;
+.invoice-line-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
 }
 
-.numeric-input {
-  width: 100%;
-  min-width: 120px;
+.invoice-line-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.invoice-line-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.invoice-line-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-primary);
+}
+
+.invoice-line-subtitle {
+  margin: 6px 0 0 0;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.invoice-line-total {
+  min-width: 170px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
   text-align: right;
 }
 
-.revenue-account-cell {
-  min-width: 190px;
+.invoice-line-total-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.invoice-line-total-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.invoice-line-toggle {
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.invoice-line-toggle:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.invoice-line-body {
+  border-top: 1px solid var(--border-color);
+  padding-top: 14px;
+}
+
+.invoice-line-top,
+.invoice-line-bottom {
+  display: grid;
+  gap: 14px;
+}
+
+.invoice-line-top {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(260px, 1.8fr) minmax(220px, 1fr);
+}
+
+.invoice-line-bottom {
+  grid-template-columns: minmax(110px, 0.7fr) minmax(140px, 0.9fr) minmax(120px, 0.7fr) minmax(160px, 1fr) 56px;
+  margin-top: 12px;
+  align-items: end;
+}
+
+.invoice-line-field {
+  min-width: 0;
+}
+
+.invoice-line-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.invoice-line-field-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.quantity-control {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  gap: 8px;
+  align-items: center;
+}
+
+.quantity-control-input {
+  width: 100%;
+  text-align: center;
+  padding-left: 12px;
+  padding-right: 12px;
+  box-sizing: border-box;
+}
+
+.quantity-control-btn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.quantity-control-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-muted);
+}
+
+@media (max-width: 1100px) {
+  .invoice-line-header {
+    flex-direction: column;
+  }
+
+  .invoice-line-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .invoice-line-total {
+    text-align: left;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .invoice-line-top {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-line-bottom {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .invoice-line-field-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 700px) {
+  .invoice-line-bottom {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-input-sm, .form-select-sm {

@@ -138,8 +138,8 @@ impl InvoiceService {
             updated_at: now,
         };
 
-        self.invoice_repo.save_sales(&invoice).await?;
-        Ok(SalesInvoiceResponse::from(invoice))
+        let saved = self.invoice_repo.save_sales(&invoice).await?;
+        Ok(SalesInvoiceResponse::from(saved))
     }
 
     pub async fn update_sales_draft(
@@ -282,9 +282,9 @@ mod tests {
         async fn count_sales_by_company(&self, _company_id: Uuid) -> Result<u64, AppError> {
             Ok(0)
         }
-        async fn save_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError> {
+        async fn save_sales(&self, invoice: &SalesInvoice) -> Result<SalesInvoice, AppError> {
             self.sales.lock().unwrap().push(invoice.clone());
-            Ok(())
+            Ok(invoice.clone())
         }
         async fn update_sales(&self, _invoice: &SalesInvoice) -> Result<(), AppError> {
             Ok(())

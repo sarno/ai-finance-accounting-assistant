@@ -20,7 +20,7 @@ pub trait InvoiceRepository: Send + Sync {
         per_page: u32,
     ) -> Result<Vec<SalesInvoice>, AppError>;
     async fn count_sales_by_company(&self, company_id: Uuid) -> Result<u64, AppError>;
-    async fn save_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError>;
+    async fn save_sales(&self, invoice: &SalesInvoice) -> Result<SalesInvoice, AppError>;
     async fn update_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError>;
     async fn delete_sales(&self, id: Uuid) -> Result<(), AppError>;
     async fn find_purchase_by_id(&self, id: Uuid) -> Result<PurchaseInvoice, AppError>;

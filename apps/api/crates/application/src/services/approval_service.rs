@@ -585,9 +585,9 @@ mod tests {
         async fn count_sales_by_company(&self, _company_id: Uuid) -> Result<u64, AppError> {
             Ok(0)
         }
-        async fn save_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError> {
+        async fn save_sales(&self, invoice: &SalesInvoice) -> Result<SalesInvoice, AppError> {
             *self.sales.lock().unwrap() = Some(invoice.clone());
-            Ok(())
+            Ok(invoice.clone())
         }
         async fn update_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError> {
             *self.sales.lock().unwrap() = Some(invoice.clone());

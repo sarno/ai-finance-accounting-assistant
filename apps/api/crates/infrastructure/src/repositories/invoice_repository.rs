@@ -14,6 +14,14 @@ impl PgInvoiceRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    fn should_generate_sales_invoice_number(
+        invoice_number: &str,
+        invoice_date: time::Date,
+    ) -> bool {
+        let prefix = format!("INV/{}/", invoice_date.year());
+        invoice_number.trim().is_empty() || invoice_number.starts_with(&prefix)
+    }
 }
 
 #[async_trait]
@@ -208,12 +216,62 @@ impl InvoiceRepository for PgInvoiceRepository {
         Ok(count as u64)
     }
 
-    async fn save_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError> {
+    async fn save_sales(&self, invoice: &SalesInvoice) -> Result<SalesInvoice, AppError> {
         let mut tx = self
             .pool
             .begin()
             .await
             .map_err(|e| AppError::Internal(e.into()))?;
+
+        let mut stored_invoice = invoice.clone();
+
+        if Self::should_generate_sales_invoice_number(
+            &stored_invoice.invoice_number,
+            stored_invoice.invoice_date,
+        ) {
+            let lock_key = format!(
+                "sales_invoice_number:{}:{}",
+                stored_invoice.company_id,
+                stored_invoice.invoice_date.year()
+            );
+            sqlx::query(
+                r#"
+                SELECT pg_advisory_xact_lock(hashtext($1), hashtext($1 || ':sequence'))
+                "#,
+            )
+            .bind(&lock_key)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
+
+            let row = sqlx::query(
+                r#"
+                SELECT COALESCE(
+                    MAX((split_part(invoice_number, '/', 3))::int),
+                    0
+                ) AS max_sequence
+                FROM sales_invoices
+                WHERE company_id = $1
+                  AND invoice_number LIKE $2
+                  AND split_part(invoice_number, '/', 1) = 'INV'
+                  AND split_part(invoice_number, '/', 2) = $3
+                  AND split_part(invoice_number, '/', 3) ~ '^[0-9]+$'
+                "#,
+            )
+            .bind(stored_invoice.company_id)
+            .bind(format!("INV/{}/%", stored_invoice.invoice_date.year()))
+            .bind(stored_invoice.invoice_date.year().to_string())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
+
+            let next_sequence: i64 = row.get("max_sequence");
+            stored_invoice.invoice_number = format!(
+                "INV/{}/{:03}",
+                stored_invoice.invoice_date.year(),
+                next_sequence + 1
+            );
+        }
 
         sqlx::query(
             r#"
@@ -224,27 +282,27 @@ impl InvoiceRepository for PgInvoiceRepository {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::document_status, $12, $13, $14, $15, $16)
             "#,
         )
-        .bind(invoice.id)
-        .bind(invoice.company_id)
-        .bind(invoice.branch_id)
-        .bind(&invoice.invoice_number)
-        .bind(invoice.customer_id)
-        .bind(invoice.invoice_date)
-        .bind(invoice.due_date)
-        .bind(invoice.subtotal)
-        .bind(invoice.tax_amount)
-        .bind(invoice.total_amount)
-        .bind(invoice.status.clone())
-        .bind(&invoice.notes)
-        .bind(invoice.journal_entry_id)
-        .bind(invoice.created_by)
-        .bind(invoice.created_at)
-        .bind(invoice.updated_at)
+        .bind(stored_invoice.id)
+        .bind(stored_invoice.company_id)
+        .bind(stored_invoice.branch_id)
+        .bind(&stored_invoice.invoice_number)
+        .bind(stored_invoice.customer_id)
+        .bind(stored_invoice.invoice_date)
+        .bind(stored_invoice.due_date)
+        .bind(stored_invoice.subtotal)
+        .bind(stored_invoice.tax_amount)
+        .bind(stored_invoice.total_amount)
+        .bind(stored_invoice.status.clone())
+        .bind(&stored_invoice.notes)
+        .bind(stored_invoice.journal_entry_id)
+        .bind(stored_invoice.created_by)
+        .bind(stored_invoice.created_at)
+        .bind(stored_invoice.updated_at)
         .execute(&mut *tx)
         .await
         .map_err(|e| AppError::Internal(e.into()))?;
 
-        for line in &invoice.lines {
+        for line in &stored_invoice.lines {
             sqlx::query(
                 r#"
                 INSERT INTO sales_invoice_lines (
@@ -255,7 +313,7 @@ impl InvoiceRepository for PgInvoiceRepository {
                 "#,
             )
             .bind(line.id)
-            .bind(invoice.id)
+            .bind(stored_invoice.id)
             .bind(&line.description)
             .bind(line.quantity)
             .bind(line.unit_price)
@@ -275,7 +333,7 @@ impl InvoiceRepository for PgInvoiceRepository {
         tx.commit()
             .await
             .map_err(|e| AppError::Internal(e.into()))?;
-        Ok(())
+        Ok(stored_invoice)
     }
 
     async fn update_sales(&self, invoice: &SalesInvoice) -> Result<(), AppError> {
