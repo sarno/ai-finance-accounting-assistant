@@ -267,6 +267,180 @@
               </div>
             </div>
 
+            <!-- Purchase Invoice Details Display -->
+            <div v-else-if="activeRequest.documentType === 'purchase_invoice' && purchaseInvoiceDetails" class="doc-details-box">
+              <div class="detail-grid" style="margin-bottom: 16px;">
+                <div>
+                  <p class="detail-label">Supplier Invoice Number</p>
+                  <p class="detail-val-highlight">{{ purchaseInvoiceDetails.supplierInvoiceNumber }}</p>
+                </div>
+                <div>
+                  <p class="detail-label">Internal Reference</p>
+                  <p class="detail-val">{{ purchaseInvoiceDetails.internalReference }}</p>
+                </div>
+                <div>
+                  <p class="detail-label">Supplier</p>
+                  <p class="detail-val">{{ getSupplierName(purchaseInvoiceDetails.supplierId) }}</p>
+                </div>
+                <div>
+                  <p class="detail-label">Invoice Date</p>
+                  <p class="detail-val">{{ formatDate(purchaseInvoiceDetails.invoiceDate) }}</p>
+                </div>
+                <div>
+                  <p class="detail-label">Due Date</p>
+                  <p class="detail-val">{{ formatDate(purchaseInvoiceDetails.dueDate) }}</p>
+                </div>
+              </div>
+
+              <h4>Invoice Lines</h4>
+              <div class="table-container" style="margin-top: 8px;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Description</th>
+                      <th>Account</th>
+                      <th style="text-align: right;">Qty</th>
+                      <th style="text-align: right;">Unit Price</th>
+                      <th style="text-align: right;">Discount</th>
+                      <th style="text-align: right;">Tax Amount</th>
+                      <th style="text-align: right;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="line in purchaseInvoiceDetails.lines" :key="line.id">
+                      <td>{{ line.description }}</td>
+                      <td>{{ getAccountName(line.accountId) }}</td>
+                      <td style="text-align: right;">{{ line.quantity }}</td>
+                      <td style="text-align: right;">{{ formatCurrency(line.unitPrice) }}</td>
+                      <td style="text-align: right;">{{ line.discountAmount > 0 ? formatCurrency(line.discountAmount) : '-' }}</td>
+                      <td style="text-align: right;">{{ line.taxAmount > 0 ? formatCurrency(line.taxAmount) : '-' }}</td>
+                      <td style="text-align: right; font-weight: 500;">{{ formatCurrency(line.lineTotal) }}</td>
+                    </tr>
+                    <tr class="totals-row">
+                      <td colspan="5" style="font-weight: 600;">Subtotal</td>
+                      <td colspan="2" style="text-align: right; font-weight: 600;">{{ formatCurrency(purchaseInvoiceDetails.subtotal) }}</td>
+                    </tr>
+                    <tr class="totals-row" style="border-top: none;">
+                      <td colspan="5" style="font-weight: 600;">Tax Amount</td>
+                      <td colspan="2" style="text-align: right; font-weight: 600;">{{ formatCurrency(purchaseInvoiceDetails.taxAmount) }}</td>
+                    </tr>
+                    <tr class="totals-row" style="border-top: none;">
+                      <td colspan="5" style="font-weight: 700; color: var(--accent-primary);">Grand Total</td>
+                      <td colspan="2" style="text-align: right; font-weight: 700; color: var(--accent-primary); font-size: 1.05rem;">
+                        {{ formatCurrency(purchaseInvoiceDetails.totalAmount) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Purchase Invoice Attachment -->
+              <div v-if="purchaseInvoiceDetails.attachmentUrl" class="notes-box" style="margin-top: 16px;">
+                <p class="notes-label" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); margin-bottom: 6.0px;">Attachment</p>
+                <div class="attachment-preview-box" style="display: flex; flex-direction: column; align-items: flex-start;">
+                  <a :href="purchaseInvoiceDetails.attachmentUrl" target="_blank" class="attachment-link" style="color: var(--accent-primary); display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 500;">
+                    <template v-if="isPdf(purchaseInvoiceDetails.attachmentUrl)">
+                      <span>📄</span> View PDF Document
+                    </template>
+                    <template v-else>
+                      <span>🖼️</span> View Attached Image
+                    </template>
+                  </a>
+                  <div v-if="!isPdf(purchaseInvoiceDetails.attachmentUrl)" class="attachment-image-thumb-container" style="margin-top: 8px;">
+                    <img :src="purchaseInvoiceDetails.attachmentUrl" alt="Attachment" class="attachment-image-thumb" style="max-width: 100%; max-height: 120px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); object-fit: contain; cursor: pointer;" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Payment Details -->
+            <div v-else-if="(activeRequest.documentType === 'payment_received' || activeRequest.documentType === 'payment_paid') && paymentDetails">
+              <div class="meta-card" style="margin-bottom: 20px;">
+                <div>
+                  <div class="meta-label">Reference Number</div>
+                  <div class="meta-val-highlight">{{ paymentDetails.referenceNumber }}</div>
+                </div>
+                <div>
+                  <div class="meta-label">Payment Date</div>
+                  <div class="meta-val">{{ formatDate(paymentDetails.paymentDate) }}</div>
+                </div>
+                <div>
+                  <div class="meta-label">Type</div>
+                  <div class="meta-val">
+                    <span :class="['badge', paymentDetails.paymentType === 'payment_received' ? 'badge-success' : 'badge-info']">
+                      {{ paymentDetails.paymentType === 'payment_received' ? 'Payment Received' : 'Payment Paid' }}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div class="meta-label">Bank Account</div>
+                  <div class="meta-val">{{ getBankAccountName(paymentDetails.bankAccountId) }}</div>
+                </div>
+                <div>
+                  <div class="meta-label">Total Amount</div>
+                  <div class="meta-val-highlight" style="color: #10b981;">
+                    {{ formatCurrency(paymentDetails.amount) }}
+                  </div>
+                </div>
+              </div>
+              <div v-if="paymentDetails.notes || paymentDetails.attachmentUrl" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 20px;">
+                <div v-if="paymentDetails.notes" class="notes-box" style="flex: 1; min-width: 300px; margin-top: 0;">
+                  <p class="notes-label" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">Notes</p>
+                  <p style="margin: 0; font-size: 0.9rem; white-space: pre-wrap;">{{ paymentDetails.notes }}</p>
+                </div>
+                <div v-if="paymentDetails.attachmentUrl" class="notes-box" style="flex: 1; min-width: 300px; margin-top: 0;">
+                  <p class="notes-label" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">Attachment</p>
+                  <div class="attachment-preview-box" style="display: flex; flex-direction: column; align-items: flex-start;">
+                    <a :href="paymentDetails.attachmentUrl" target="_blank" class="attachment-link" style="color: var(--accent-primary); display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 500;">
+                      <template v-if="isPdf(paymentDetails.attachmentUrl)">
+                        <span>📄</span> View PDF Document
+                      </template>
+                      <template v-else>
+                        <span>🖼️</span> View Attached Image
+                      </template>
+                    </a>
+                    <div v-if="!isPdf(paymentDetails.attachmentUrl)" class="attachment-image-thumb-container" style="margin-top: 8px;">
+                      <img :src="paymentDetails.attachmentUrl" alt="Attachment" class="attachment-image-thumb" style="max-width: 100%; max-height: 120px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); object-fit: contain; cursor: pointer;" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Allocations -->
+              <div v-if="paymentDetails.allocations && paymentDetails.allocations.length > 0">
+                <h4 style="margin-bottom: 10px; font-weight: 600;">Invoices Allocations</h4>
+                <div class="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Document Type</th>
+                        <th>Invoice Number / ID</th>
+                        <th style="text-align: right;">Allocated Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="alloc in paymentDetails.allocations" :key="alloc.id">
+                        <td>
+                          <span class="badge badge-secondary">
+                            {{ alloc.documentType === 'sales_invoice' ? 'Sales Invoice' : 'Purchase Invoice' }}
+                          </span>
+                        </td>
+                        <td style="font-weight: 500;">
+                          {{ getInvoiceNumberById(alloc.documentId, alloc.documentType) }}
+                        </td>
+                        <td style="text-align: right; font-weight: 600; color: var(--accent-primary);">
+                          {{ formatCurrency(alloc.allocatedAmount) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div v-else class="empty-state">
+                No allocations recorded for this payment.
+              </div>
+            </div>
+
             <!-- Fallback for other doc types -->
             <div v-else class="empty-state" style="margin-top: 8px;">
               Details parser not implemented for document type: {{ activeRequest.documentType }}
@@ -319,11 +493,13 @@ import { useApprovalStore } from '@/stores/approval.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { journalApi } from '@/api/journals.api'
 import { invoiceApi } from '@/api/invoices.api'
-import { customerApi, accountApi } from '@/api/master-data.api'
+import { paymentApi } from '@/api/payments.api'
+import { customerApi, accountApi, supplierApi, bankAccountApi } from '@/api/master-data.api'
 import type { ApprovalRequest } from '@/types/approval.types'
 import type { JournalEntry } from '@/types/journal.types'
-import type { SalesInvoice } from '@/types/invoice.types'
-import type { Account, Customer } from '@/types/master-data.types'
+import type { SalesInvoice, PurchaseInvoice } from '@/types/invoice.types'
+import type { Payment } from '@/types/payment.types'
+import type { Account, Customer, Supplier, BankAccount } from '@/types/master-data.types'
 
 const approvalStore = useApprovalStore()
 const authStore = useAuthStore()
@@ -349,8 +525,14 @@ const loadingDoc = ref(false)
 const docLoadError = ref<string | null>(null)
 const journalDetails = ref<JournalEntry | null>(null)
 const invoiceDetails = ref<SalesInvoice | null>(null)
+const purchaseInvoiceDetails = ref<PurchaseInvoice | null>(null)
+const paymentDetails = ref<Payment | null>(null)
 const accounts = ref<Account[]>([])
 const customers = ref<Customer[]>([])
+const suppliers = ref<Supplier[]>([])
+const bankAccounts = ref<BankAccount[]>([])
+const salesInvoices = ref<SalesInvoice[]>([])
+const purchaseInvoices = ref<PurchaseInvoice[]>([])
 
 // Computeds for filtering & paging
 const uniqueDocTypes = computed(() => {
@@ -438,6 +620,9 @@ onMounted(async () => {
   await fetchPending()
   await loadAccounts()
   await loadCustomers()
+  await loadSuppliers()
+  await loadBankAccounts()
+  await loadInvoices()
 })
 
 async function fetchPending() {
@@ -469,6 +654,62 @@ async function loadCustomers() {
   }
 }
 
+async function loadSuppliers() {
+  const companyId = authStore.currentUser?.companyId
+  if (!companyId) return
+  try {
+    suppliers.value = await supplierApi.listByCompany(companyId)
+  } catch (err: any) {
+    console.error('Failed to load suppliers map', err)
+  }
+}
+
+async function loadBankAccounts() {
+  const companyId = authStore.currentUser?.companyId
+  if (!companyId) return
+  try {
+    bankAccounts.value = await bankAccountApi.listByCompany(companyId)
+  } catch (err: any) {
+    console.error('Failed to load bank accounts map', err)
+  }
+}
+
+async function loadInvoices() {
+  const companyId = authStore.currentUser?.companyId
+  if (!companyId) return
+  try {
+    const [salesRes, purchaseRes] = await Promise.all([
+      invoiceApi.listSales({ companyId, page: 1, perPage: 1000 }),
+      invoiceApi.listPurchases({ companyId, page: 1, perPage: 1000 })
+    ])
+    salesInvoices.value = salesRes.data
+    purchaseInvoices.value = purchaseRes.data
+  } catch (err: any) {
+    console.error('Failed to load invoices map', err)
+  }
+}
+
+function getBankAccountName(id: string): string {
+  const ba = bankAccountsMap.value.get(id)
+  return ba ? `${ba.bankName} - ${ba.accountName}` : id
+}
+
+function getInvoiceNumberById(id: string, type: 'sales_invoice' | 'purchase_invoice'): string {
+  if (type === 'sales_invoice') {
+    const inv = salesInvoices.value.find(si => si.id === id)
+    return inv ? inv.invoiceNumber : id
+  } else {
+    const inv = purchaseInvoices.value.find(pi => pi.id === id)
+    return inv ? inv.supplierInvoiceNumber : id
+  }
+}
+
+const bankAccountsMap = computed(() => {
+  const map = new Map<string, BankAccount>()
+  bankAccounts.value.forEach(b => map.set(b.id, b))
+  return map
+})
+
 const accountsMap = computed(() => {
   const map = new Map<string, Account>()
   accounts.value.forEach(a => map.set(a.id, a))
@@ -478,6 +719,12 @@ const accountsMap = computed(() => {
 const customersMap = computed(() => {
   const map = new Map<string, Customer>()
   customers.value.forEach(c => map.set(c.id, c))
+  return map
+})
+
+const suppliersMap = computed(() => {
+  const map = new Map<string, Supplier>()
+  suppliers.value.forEach(s => map.set(s.id, s))
   return map
 })
 
@@ -491,6 +738,11 @@ function getCustomerName(customerId: string): string {
   return cust ? cust.name : customerId
 }
 
+function getSupplierName(supplierId: string): string {
+  const supp = suppliersMap.value.get(supplierId)
+  return supp ? supp.name : supplierId
+}
+
 // Open modal and fetch target details
 async function viewAndProcess(req: ApprovalRequest) {
   activeRequest.value = req
@@ -498,6 +750,8 @@ async function viewAndProcess(req: ApprovalRequest) {
   docLoadError.value = null
   journalDetails.value = null
   invoiceDetails.value = null
+  purchaseInvoiceDetails.value = null
+  paymentDetails.value = null
   loadingDoc.value = true
   showProcessModal.value = true
 
@@ -506,6 +760,10 @@ async function viewAndProcess(req: ApprovalRequest) {
       journalDetails.value = await journalApi.getById(req.documentId)
     } else if (req.documentType === 'sales_invoice') {
       invoiceDetails.value = await invoiceApi.getSalesById(req.documentId)
+    } else if (req.documentType === 'purchase_invoice') {
+      purchaseInvoiceDetails.value = await invoiceApi.getPurchaseById(req.documentId)
+    } else if (req.documentType === 'payment_received' || req.documentType === 'payment_paid') {
+      paymentDetails.value = await paymentApi.getById(req.documentId)
     }
   } catch (err: any) {
     docLoadError.value = `Failed to retrieve target document details: ${err.message}`
@@ -519,6 +777,8 @@ function closeProcessModal() {
   activeRequest.value = null
   journalDetails.value = null
   invoiceDetails.value = null
+  purchaseInvoiceDetails.value = null
+  paymentDetails.value = null
 }
 
 async function handleAction(action: 'approve' | 'reject') {
@@ -570,6 +830,11 @@ function formatCurrency(val: number): string {
     currency: 'IDR',
     minimumFractionDigits: 0
   }).format(val)
+}
+
+const isPdf = (url: string | undefined): boolean => {
+  if (!url) return false
+  return url.toLowerCase().endsWith('.pdf')
 }
 </script>
 

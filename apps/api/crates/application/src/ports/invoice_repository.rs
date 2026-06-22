@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use finance_assistant_domain::entities::{
     approval::ApprovalRequest,
     invoice::{PurchaseInvoice, SalesInvoice},
-    payment::Payment,
     tax::TaxType,
 };
 use uuid::Uuid;
@@ -42,12 +41,6 @@ pub trait InvoiceRepository: Send + Sync {
     ) -> Result<bool, AppError>;
 }
 
-#[async_trait]
-pub trait PaymentRepository: Send + Sync {
-    async fn find_by_id(&self, id: Uuid) -> Result<Payment, AppError>;
-    async fn save(&self, payment: &Payment) -> Result<(), AppError>;
-    async fn update(&self, payment: &Payment) -> Result<(), AppError>;
-}
 
 #[async_trait]
 pub trait ApprovalRepository: Send + Sync {

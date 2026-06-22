@@ -14,7 +14,7 @@ use config::AppConfig;
 use finance_assistant_app::services::{
     approval_service::ApprovalService, auth_service::AuthService, invoice_service::InvoiceService,
     item_service::ItemService, journal_service::JournalService,
-    master_data_service::MasterDataService,
+    master_data_service::MasterDataService, payment_service::PaymentService,
 };
 use finance_assistant_infra::{
     db,
@@ -26,6 +26,7 @@ use finance_assistant_infra::{
         invoice_repository::PgInvoiceRepository, item_repository::PgItemRepository,
         journal_repository::PgJournalRepository, supplier_repository::PgSupplierRepository,
         tax_repository::PgTaxRepository, user_repository::PgUserRepository,
+        payment_repository::PgPaymentRepository,
     },
 };
 
@@ -80,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
         account_repo.clone(),
         customer_repo,
         supplier_repo.clone(),
-        bank_account_repo,
+        bank_account_repo.clone(),
         tax_repo.clone(),
     ));
     let invoice_svc = Arc::new(InvoiceService::new(
@@ -92,6 +93,8 @@ async fn main() -> anyhow::Result<()> {
         journal_repo.clone(),
     ));
     let item_svc = Arc::new(ItemService::new(item_repo.clone()));
+    let payment_repo = Arc::new(PgPaymentRepository::new(pool.clone()));
+    let payment_svc = Arc::new(PaymentService::new(payment_repo.clone()));
     let approval_svc = Arc::new(ApprovalService::new(
         approval_repo,
         journal_repo.clone(),
@@ -100,6 +103,8 @@ async fn main() -> anyhow::Result<()> {
         invoice_repo.clone(),
         account_repo.clone(),
         tax_repo.clone(),
+        payment_repo,
+        bank_account_repo,
     ));
 
     let app_state = state::AppState {
@@ -111,6 +116,7 @@ async fn main() -> anyhow::Result<()> {
         approval_service: approval_svc,
         invoice_service: invoice_svc,
         item_service: item_svc,
+        payment_service: payment_svc,
     };
 
     // ─── Build Axum router ────────────────────────────────────────────────────

@@ -255,7 +255,7 @@ impl InvoiceRepository for PgInvoiceRepository {
             let row = sqlx::query(
                 r#"
                 SELECT COALESCE(
-                    MAX((split_part(invoice_number, '/', 3))::int),
+                    MAX((split_part(invoice_number, '/', 3))::bigint),
                     0
                 ) AS max_sequence
                 FROM sales_invoices
@@ -448,7 +448,7 @@ impl InvoiceRepository for PgInvoiceRepository {
     async fn find_purchase_by_id(&self, id: Uuid) -> Result<PurchaseInvoice, AppError> {
         let invoice_row = sqlx::query(
             r#"
-            SELECT id, company_id, branch_id, supplier_invoice_number, internal_reference, supplier_id, invoice_date, due_date, subtotal, tax_amount, total_amount, status, ai_confidence, uploaded_document_id, journal_entry_id, notes, created_by, created_at, updated_at
+            SELECT id, company_id, branch_id, supplier_invoice_number, internal_reference, supplier_id, invoice_date, due_date, subtotal, tax_amount, total_amount, status, ai_confidence, uploaded_document_id, journal_entry_id, notes, attachment_url, created_by, created_at, updated_at
             FROM purchase_invoices
             WHERE id = $1
             "#,
@@ -519,6 +519,7 @@ impl InvoiceRepository for PgInvoiceRepository {
             uploaded_document_id: invoice_row.get("uploaded_document_id"),
             journal_entry_id: invoice_row.get("journal_entry_id"),
             notes: invoice_row.get("notes"),
+            attachment_url: invoice_row.get("attachment_url"),
             created_by: invoice_row.get("created_by"),
             created_at: invoice_row.get("created_at"),
             updated_at: invoice_row.get("updated_at"),
@@ -536,7 +537,7 @@ impl InvoiceRepository for PgInvoiceRepository {
 
         let invoice_rows = sqlx::query(
             r#"
-            SELECT id, company_id, branch_id, supplier_invoice_number, internal_reference, supplier_id, invoice_date, due_date, subtotal, tax_amount, total_amount, status, ai_confidence, uploaded_document_id, journal_entry_id, notes, created_by, created_at, updated_at
+            SELECT id, company_id, branch_id, supplier_invoice_number, internal_reference, supplier_id, invoice_date, due_date, subtotal, tax_amount, total_amount, status, ai_confidence, uploaded_document_id, journal_entry_id, notes, attachment_url, created_by, created_at, updated_at
             FROM purchase_invoices
             WHERE company_id = $1
             ORDER BY invoice_date DESC, created_at DESC
@@ -615,6 +616,7 @@ impl InvoiceRepository for PgInvoiceRepository {
                 uploaded_document_id: r.get("uploaded_document_id"),
                 journal_entry_id: r.get("journal_entry_id"),
                 notes: r.get("notes"),
+                attachment_url: r.get("attachment_url"),
                 created_by: r.get("created_by"),
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
@@ -672,7 +674,7 @@ impl InvoiceRepository for PgInvoiceRepository {
             let row = sqlx::query(
                 r#"
                 SELECT COALESCE(
-                    MAX((split_part(internal_reference, '/', 3))::int),
+                    MAX((split_part(internal_reference, '/', 3))::bigint),
                     0
                 ) AS max_sequence
                 FROM purchase_invoices
@@ -702,9 +704,9 @@ impl InvoiceRepository for PgInvoiceRepository {
             r#"
             INSERT INTO purchase_invoices (
                 id, company_id, branch_id, supplier_invoice_number, internal_reference, supplier_id, invoice_date, due_date,
-                subtotal, tax_amount, total_amount, status, ai_confidence, uploaded_document_id, journal_entry_id, notes, created_by, created_at, updated_at
+                subtotal, tax_amount, total_amount, status, ai_confidence, uploaded_document_id, journal_entry_id, notes, attachment_url, created_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::document_status, $13, $14, $15, $16, $17, $18, $19)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::document_status, $13, $14, $15, $16, $17, $18, $19, $20)
             "#,
         )
         .bind(stored_invoice.id)
@@ -723,6 +725,7 @@ impl InvoiceRepository for PgInvoiceRepository {
         .bind(stored_invoice.uploaded_document_id)
         .bind(stored_invoice.journal_entry_id)
         .bind(&stored_invoice.notes)
+        .bind(&stored_invoice.attachment_url)
         .bind(stored_invoice.created_by)
         .bind(stored_invoice.created_at)
         .bind(stored_invoice.updated_at)
@@ -788,7 +791,8 @@ impl InvoiceRepository for PgInvoiceRepository {
                 uploaded_document_id = $13,
                 journal_entry_id = $14,
                 notes = $15,
-                updated_at = $16
+                attachment_url = $16,
+                updated_at = $17
             WHERE id = $1
             "#,
         )
@@ -807,6 +811,7 @@ impl InvoiceRepository for PgInvoiceRepository {
         .bind(invoice.uploaded_document_id)
         .bind(invoice.journal_entry_id)
         .bind(&invoice.notes)
+        .bind(&invoice.attachment_url)
         .bind(invoice.updated_at)
         .execute(&mut *tx)
         .await

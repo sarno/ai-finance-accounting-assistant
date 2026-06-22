@@ -49,6 +49,7 @@ pub struct PurchaseInvoice {
     pub uploaded_document_id: Option<Uuid>,
     pub journal_entry_id: Option<Uuid>,
     pub notes: Option<String>,
+    pub attachment_url: Option<String>,
     pub created_by: Uuid,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,

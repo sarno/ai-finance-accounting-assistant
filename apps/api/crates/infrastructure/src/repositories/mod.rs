@@ -11,3 +11,4 @@ pub mod journal_repository;
 pub mod supplier_repository;
 pub mod tax_repository;
 pub mod user_repository;
+pub mod payment_repository;

@@ -20,6 +20,7 @@ pub struct Payment {
     pub status: DocumentStatus,
     pub notes: Option<String>,
     pub journal_entry_id: Option<Uuid>,
+    pub attachment_url: Option<String>,
     pub created_by: Uuid,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,

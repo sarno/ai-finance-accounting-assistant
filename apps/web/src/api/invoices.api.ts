@@ -82,4 +82,15 @@ export const invoiceApi = {
   submitPurchaseApproval: async (id: string): Promise<void> => {
     await client.post(`/purchase-invoices/${id}/submit`)
   },
+
+  uploadAttachment: async (file: File): Promise<string> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const { data } = await client.post<{ url: string }>('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return data.url
+  },
 }

@@ -59,7 +59,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="invoice in filteredPurchases" :key="invoice.id">
+          <tr v-for="invoice in paginatedPurchases" :key="invoice.id">
             <td>{{ formatDate(invoice.invoiceDate) }}</td>
             <td style="font-weight: 600; color: var(--accent-primary);">{{ invoice.supplierInvoiceNumber }}</td>
             <td style="font-family: monospace;">{{ invoice.internalReference }}</td>
@@ -118,6 +118,39 @@
       </table>
     </div>
 
+    <!-- Pagination Footer -->
+    <div class="pagination-footer" v-if="filteredPurchases.length > 0">
+      <div class="pagination-info">
+        Showing {{ paginationStart }} to {{ paginationEnd }} of {{ filteredPurchases.length }} entries
+      </div>
+      <div class="pagination-buttons">
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="currentPage === 1"
+          @click="changePage(currentPage - 1)"
+        >
+          Previous
+        </button>
+        
+        <button
+          v-for="page in visiblePages"
+          :key="page"
+          :class="['btn btn-sm', page === currentPage ? 'btn-primary' : 'btn-secondary']"
+          @click="changePage(page)"
+        >
+          {{ page }}
+        </button>
+        
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="currentPage === totalPages"
+          @click="changePage(currentPage + 1)"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+
     <div v-if="showDetailModal && selectedInvoice" class="modal-overlay" @click.self="closeDetailModal">
       <div class="modal-content modal-lg-custom">
         <div class="modal-header">
@@ -152,9 +185,27 @@
             </div>
           </div>
 
-          <div v-if="selectedInvoice.notes" class="notes-box" style="margin-top: 20px;">
-            <p class="notes-label">Notes</p>
-            <p>{{ selectedInvoice.notes }}</p>
+          <div class="notes-attachment-section" style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 20px;">
+            <div v-if="selectedInvoice.notes" class="notes-box" style="flex: 1; min-width: 300px; margin-top: 0;">
+              <p class="notes-label">Notes</p>
+              <p>{{ selectedInvoice.notes }}</p>
+            </div>
+            <div v-if="selectedInvoice.attachmentUrl" class="notes-box" style="flex: 1; min-width: 300px; margin-top: 0;">
+              <p class="notes-label">Attachment</p>
+              <div class="attachment-preview-box">
+                <a :href="selectedInvoice.attachmentUrl" target="_blank" class="attachment-link" style="color: var(--accent-primary); display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 500;">
+                  <template v-if="isPdf(selectedInvoice.attachmentUrl)">
+                    <span>📄</span> View PDF Document
+                  </template>
+                  <template v-else>
+                    <span>🖼️</span> View Attached Image
+                  </template>
+                </a>
+                <div v-if="!isPdf(selectedInvoice.attachmentUrl)" class="attachment-image-thumb-container" style="margin-top: 8px;">
+                  <img :src="selectedInvoice.attachmentUrl" alt="Attachment" class="attachment-image-thumb" style="max-width: 100%; max-height: 120px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); object-fit: contain; cursor: pointer;" />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div style="margin-top: 24px;">
@@ -236,6 +287,8 @@
           <button class="modal-close" @click="closeFormModal">&times;</button>
         </div>
         <div class="modal-body">
+          <div v-if="modalError" class="alert alert-danger" style="margin-bottom: 16px;">{{ modalError }}</div>
+          <div v-if="modalSuccess" class="alert alert-success" style="margin-bottom: 16px;">{{ modalSuccess }}</div>
           <form @submit.prevent="saveDraft">
             <div class="form-grid-3">
               <div class="form-group">
@@ -284,6 +337,44 @@
             <div class="form-group" style="margin-top: 16px;">
               <label class="form-label">Notes</label>
               <textarea v-model="form.notes" class="form-textarea" rows="2" placeholder="Internal notes or supplier remarks..."></textarea>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+              <label class="form-label">Attachment (Image or PDF)</label>
+              <div class="attachment-upload-container">
+                <input
+                  type="file"
+                  ref="fileInput"
+                  style="display: none;"
+                  accept="image/*,application/pdf"
+                  @change="handleFileUpload"
+                />
+                <div
+                  class="attachment-dropzone"
+                  :class="{ 'has-file': form.attachmentUrl, 'has-error': uploadError, 'has-success': uploadSuccess }"
+                  @click="triggerFileInput"
+                >
+                  <div v-if="uploadingAttachment" class="uploading-spinner">
+                    <span>🔄</span> Uploading attachment...
+                  </div>
+                  <div v-else-if="form.attachmentUrl" class="file-uploaded-view">
+                    <span>✅</span>
+                    <span class="file-name">{{ getAttachmentFilename(form.attachmentUrl) }}</span>
+                    <button type="button" class="btn-remove-file" @click.stop="removeAttachment">&times;</button>
+                  </div>
+                  <div v-else-if="uploadError" class="file-error-view">
+                    <span>❌ Upload Failed:</span>
+                    <span class="file-name" :title="uploadError">{{ uploadError }}</span>
+                    <button type="button" class="btn-remove-file" @click.stop="clearUploadError">&times;</button>
+                  </div>
+                  <div v-else class="upload-prompt">
+                    <span>📁</span> Click to choose image/PDF here
+                  </div>
+                </div>
+                <div v-if="uploadSuccess" class="attachment-success-msg" style="color: #10b981; font-size: 0.85rem; display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+                  <span>✨</span> Attachment uploaded successfully!
+                </div>
+              </div>
             </div>
 
             <div style="margin-top: 24px;">
@@ -351,7 +442,32 @@
                     <div class="invoice-line-bottom">
                       <div class="invoice-line-field">
                         <label class="invoice-line-label">Quantity *</label>
-                        <input v-model.number="line.quantity" type="text" inputmode="decimal" class="form-input form-input-sm quantity-control-input" required />
+                        <div class="quantity-control">
+                          <button
+                            type="button"
+                            class="quantity-control-btn"
+                            aria-label="Decrease quantity"
+                            @click="adjustQuantity(line, -1)"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            v-model.number="line.quantity"
+                            min="1"
+                            step="1"
+                            class="form-input form-input-sm quantity-control-input"
+                            required
+                          />
+                          <button
+                            type="button"
+                            class="quantity-control-btn"
+                            aria-label="Increase quantity"
+                            @click="adjustQuantity(line, 1)"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                       <div class="invoice-line-field">
                         <label class="invoice-line-label">Unit Price *</label>
@@ -439,6 +555,46 @@ const submitting = ref(false)
 const searchTerm = ref('')
 const selectedStatus = ref('')
 
+const currentPage = ref(1)
+const perPage = ref(5)
+
+const paginatedPurchases = computed(() => {
+  const start = (currentPage.value - 1) * perPage.value
+  const end = start + perPage.value
+  return filteredPurchases.value.slice(start, end)
+})
+
+const totalPages = computed(() => Math.ceil(filteredPurchases.value.length / perPage.value))
+
+const paginationStart = computed(() => {
+  if (filteredPurchases.value.length === 0) return 0
+  return (currentPage.value - 1) * perPage.value + 1
+})
+
+const paginationEnd = computed(() => Math.min(currentPage.value * perPage.value, filteredPurchases.value.length))
+
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  const maxVisible = 5
+  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+  let end = Math.min(totalPages.value, start + maxVisible - 1)
+  
+  if (end - start + 1 < maxVisible) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) pages.push(i)
+  return pages
+})
+
+function changePage(page: number) {
+  if (page >= 1 && page <= totalPages.value) currentPage.value = page
+}
+
+watch([searchTerm, selectedStatus], () => {
+  currentPage.value = 1
+})
+
 const suppliers = ref<Supplier[]>([])
 const taxTypes = ref<TaxType[]>([])
 const branches = ref<Branch[]>([])
@@ -453,6 +609,7 @@ const form = ref({
   invoiceDate: new Date().toISOString().substring(0, 10),
   dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10),
   notes: '',
+  attachmentUrl: '',
   lines: [] as Array<{
     itemId: string
     isExpanded: boolean
@@ -571,9 +728,72 @@ function generateInternalReference(dateValue: string) {
   return `${prefix}${String(nextSequence).padStart(3, '0')}`
 }
 
+const uploadingAttachment = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const uploadError = ref<string | null>(null)
+const uploadSuccess = ref(false)
+const modalError = ref<string | null>(null)
+const modalSuccess = ref<string | null>(null)
+
+function triggerFileInput() {
+  uploadError.value = null
+  fileInput.value?.click()
+}
+
+function getAttachmentFilename(url: string) {
+  if (!url) return ''
+  const parts = url.split('/')
+  return parts[parts.length - 1]
+}
+
+const isPdf = (url: string | undefined): boolean => {
+  if (!url) return false
+  return url.toLowerCase().endsWith('.pdf')
+}
+
+async function handleFileUpload(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  uploadingAttachment.value = true
+  uploadError.value = null
+  uploadSuccess.value = false
+  modalError.value = null
+  try {
+    const url = await invoiceApi.uploadAttachment(file)
+    form.value.attachmentUrl = url
+    uploadSuccess.value = true
+    setTimeout(() => {
+      uploadSuccess.value = false
+    }, 5000)
+  } catch (err: any) {
+    uploadError.value = err.response?.data?.message || err.message || 'Failed to upload attachment.'
+  } finally {
+    uploadingAttachment.value = false
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+  }
+}
+
+function removeAttachment() {
+  form.value.attachmentUrl = ''
+  uploadSuccess.value = false
+  uploadError.value = null
+}
+
+function clearUploadError() {
+  uploadError.value = null
+}
+
 function openCreateModal() {
   isEdit.value = false
   targetEditId.value = null
+  uploadError.value = null
+  uploadSuccess.value = false
+  modalError.value = null
+  modalSuccess.value = null
   form.value = {
     branchId: branches.value[0]?.id || '',
     supplierInvoiceNumber: '',
@@ -582,6 +802,7 @@ function openCreateModal() {
     invoiceDate: new Date().toISOString().substring(0, 10),
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10),
     notes: '',
+    attachmentUrl: '',
     lines: [],
   }
   form.value.internalReference = generateInternalReference(form.value.invoiceDate)
@@ -592,6 +813,10 @@ function openCreateModal() {
 function openEditModal(invoice: PurchaseInvoice) {
   isEdit.value = true
   targetEditId.value = invoice.id
+  uploadError.value = null
+  uploadSuccess.value = false
+  modalError.value = null
+  modalSuccess.value = null
   form.value = {
     branchId: invoice.branchId || '',
     supplierInvoiceNumber: invoice.supplierInvoiceNumber,
@@ -600,6 +825,7 @@ function openEditModal(invoice: PurchaseInvoice) {
     invoiceDate: new Date(invoice.invoiceDate).toISOString().substring(0, 10),
     dueDate: new Date(invoice.dueDate).toISOString().substring(0, 10),
     notes: invoice.notes || '',
+    attachmentUrl: invoice.attachmentUrl || '',
     lines: invoice.lines.map(line => ({
       itemId: line.itemId || '',
       isExpanded: true,
@@ -616,6 +842,10 @@ function openEditModal(invoice: PurchaseInvoice) {
 
 function closeFormModal() {
   showFormModal.value = false
+  uploadError.value = null
+  uploadSuccess.value = false
+  modalError.value = null
+  modalSuccess.value = null
 }
 
 function addLine() {
@@ -646,6 +876,12 @@ function toggleLineExpanded(line: { isExpanded?: boolean }) {
 
 function removeLine(index: number) {
   form.value.lines.splice(index, 1)
+}
+
+function adjustQuantity(line: { quantity: number }, delta: number) {
+  const current = Number(line.quantity)
+  const base = Number.isFinite(current) ? Math.trunc(current) : 0
+  line.quantity = Math.max(1, base + delta)
 }
 
 function getTaxRate(taxTypeId: string) {
@@ -779,11 +1015,13 @@ async function saveDraft() {
 
   const validationError = validateDraftForm()
   if (validationError) {
-    errorMsg.value = validationError
+    modalError.value = validationError
     return
   }
 
   submitting.value = true
+  modalError.value = null
+  modalSuccess.value = null
   errorMsg.value = null
   successMsg.value = null
 
@@ -796,6 +1034,7 @@ async function saveDraft() {
     invoiceDate: form.value.invoiceDate,
     dueDate: form.value.dueDate,
     notes: form.value.notes || undefined,
+    attachmentUrl: form.value.attachmentUrl || undefined,
     lines: form.value.lines.map((line, idx) => ({
       itemId: line.itemId || undefined,
       description: line.description,
@@ -819,7 +1058,7 @@ async function saveDraft() {
     showFormModal.value = false
     await fetchPurchases()
   } catch (err: any) {
-    errorMsg.value = err.response?.data?.message || err.message || 'Failed to save purchase invoice draft.'
+    modalError.value = err.response?.data?.message || err.message || 'Failed to save purchase invoice draft.'
   } finally {
     submitting.value = false
   }
@@ -828,6 +1067,7 @@ async function saveDraft() {
 function resetFilters() {
   searchTerm.value = ''
   selectedStatus.value = ''
+  currentPage.value = 1
 }
 </script>
 
@@ -1130,12 +1370,38 @@ function resetFilters() {
   justify-content: center;
 }
 
+.quantity-control {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  gap: 8px;
+  align-items: center;
+}
+
 .quantity-control-input {
   width: 100%;
   text-align: center;
   padding-left: 12px;
   padding-right: 12px;
   box-sizing: border-box;
+}
+
+.quantity-control-btn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.quantity-control-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-muted);
 }
 
 .numeric-input {
@@ -1209,5 +1475,112 @@ function resetFilters() {
   .invoice-line-bottom {
     grid-template-columns: 1fr;
   }
+}
+
+/* Pagination Footer */
+.pagination-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding: 16px 24px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.attachment-upload-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attachment-dropzone {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.attachment-dropzone:hover {
+  border-color: var(--accent-primary);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.attachment-dropzone.has-file {
+  border-style: solid;
+  border-color: #10b981;
+  background-color: rgba(16, 185, 129, 0.05);
+}
+
+.upload-prompt, .file-uploaded-view, .uploading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.file-uploaded-view {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.file-name {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-remove-file {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.btn-remove-file:hover {
+  color: #f87171;
+}
+
+.attachment-preview-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.attachment-dropzone.has-error {
+  border-color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.file-error-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #ef4444;
+  font-weight: 500;
 }
 </style>

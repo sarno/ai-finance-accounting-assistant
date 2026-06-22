@@ -48,6 +48,7 @@ pub struct CreatePurchaseInvoiceRequest {
     pub due_date: time::Date,
     pub lines: Vec<CreatePurchaseInvoiceLineRequest>,
     pub notes: Option<String>,
+    pub attachment_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,6 +111,7 @@ pub struct PurchaseInvoiceResponse {
     pub total_amount: Decimal,
     pub status: String,
     pub notes: Option<String>,
+    pub attachment_url: Option<String>,
     pub journal_entry_id: Option<Uuid>,
     pub created_by: Uuid,
     #[serde(with = "crate::dto::datetime_format")]
@@ -184,6 +186,7 @@ impl From<PurchaseInvoice> for PurchaseInvoiceResponse {
             total_amount: pi.total_amount,
             status: pi.status.to_string(),
             notes: pi.notes,
+            attachment_url: pi.attachment_url,
             journal_entry_id: pi.journal_entry_id,
             created_by: pi.created_by,
             created_at: pi.created_at,

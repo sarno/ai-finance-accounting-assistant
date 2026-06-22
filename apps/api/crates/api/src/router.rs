@@ -8,18 +8,20 @@ use std::time::Duration;
 use tower_http::{
     cors::{Any, CorsLayer},
     request_id::{MakeRequestUuid, SetRequestIdLayer},
+    services::ServeDir,
     timeout::TimeoutLayer,
     trace::TraceLayer,
 };
 
 use crate::{
-    handlers::{approvals, auth, health, invoices, items, journals, master_data, reports},
+    handlers::{approvals, auth, health, invoices, items, journals, master_data, reports, upload, payments},
     middleware::auth_middleware,
     state::AppState,
 };
 
 /// Build the complete Axum router with all middleware and routes.
 pub fn build(state: AppState) -> Router {
+    let storage_base_path = state.config.storage_base_path.clone();
     let shared_state = Arc::new(state);
 
     // ─── Public routes (no auth required) ────────────────────────────────────
@@ -27,10 +29,13 @@ pub fn build(state: AppState) -> Router {
         .route("/health", get(health::health_check))
         .route("/health/db", get(health::db_health))
         .route("/api/auth/login", post(auth::login))
-        .route("/api/auth/refresh", post(auth::refresh_token));
+        .route("/api/auth/refresh", post(auth::refresh_token))
+        .nest_service("/uploads", ServeDir::new(storage_base_path));
 
     // ─── Protected routes (JWT required) ─────────────────────────────────────
     let protected_routes = Router::new()
+        // Upload
+        .route("/api/upload", post(upload::upload_file))
         // Approvals
         .route("/api/approvals", get(approvals::list_pending_approvals))
         .route("/api/approvals/:id", get(approvals::get_approval))
@@ -82,6 +87,19 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/purchase-invoices/:id/submit",
             post(invoices::submit_purchase_approval),
+        )
+        // Payments
+        .route("/api/payments", get(payments::list_payments))
+        .route("/api/payments/draft", post(payments::create_payment_draft))
+        .route(
+            "/api/payments/:id",
+            get(payments::get_payment)
+                .put(payments::update_payment)
+                .delete(payments::delete_payment),
+        )
+        .route(
+            "/api/payments/:id/submit",
+            post(payments::submit_payment_approval),
         )
         // Reports
         .route("/api/reports/cash-position", get(reports::cash_position))

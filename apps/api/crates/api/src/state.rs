@@ -4,7 +4,7 @@ use std::sync::Arc;
 use finance_assistant_app::services::{
     approval_service::ApprovalService, auth_service::AuthService, invoice_service::InvoiceService,
     item_service::ItemService, journal_service::JournalService,
-    master_data_service::MasterDataService,
+    master_data_service::MasterDataService, payment_service::PaymentService,
 };
 
 use crate::config::AppConfig;
@@ -20,4 +20,5 @@ pub struct AppState {
     pub approval_service: Arc<ApprovalService>,
     pub invoice_service: Arc<InvoiceService>,
     pub item_service: Arc<ItemService>,
+    pub payment_service: Arc<PaymentService>,
 }

@@ -388,6 +388,7 @@ impl InvoiceService {
             uploaded_document_id: None,
             journal_entry_id: None,
             notes: req.notes,
+            attachment_url: req.attachment_url,
             created_by,
             created_at: now,
             updated_at: now,
@@ -481,6 +482,7 @@ impl InvoiceService {
         existing.tax_amount = tax_amount;
         existing.total_amount = total_amount;
         existing.notes = req.notes;
+        existing.attachment_url = req.attachment_url;
         existing.updated_at = OffsetDateTime::now_utc();
 
         self.invoice_repo.update_purchase(&existing).await?;
@@ -1000,6 +1002,7 @@ mod tests {
                 account_id,
                 sort_order: 1,
             }],
+            attachment_url: None,
         };
 
         let result = service

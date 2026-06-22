@@ -4,7 +4,10 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use finance_assistant_domain::{
-    entities::approval::{ApprovalDocumentType, ApprovalRequest, ApprovalStatus},
+    entities::{
+        approval::{ApprovalDocumentType, ApprovalRequest, ApprovalStatus},
+        payment::{Payment, PaymentType},
+    },
     value_objects::DocumentStatus,
 };
 
@@ -15,7 +18,8 @@ use crate::{
         account_repository::AccountRepository, approval_repository::ApprovalRepository,
         audit_log_repository::AuditLogRepository, invoice_repository::InvoiceRepository,
         journal_repository::JournalRepository, tax_repository::TaxRepository,
-        user_repository::UserRepository,
+        user_repository::UserRepository, payment_repository::PaymentRepository,
+        bank_account_repository::BankAccountRepository,
     },
 };
 
@@ -27,6 +31,8 @@ pub struct ApprovalService {
     invoice_repo: Arc<dyn InvoiceRepository>,
     account_repo: Arc<dyn AccountRepository>,
     tax_repo: Arc<dyn TaxRepository>,
+    payment_repo: Arc<dyn PaymentRepository>,
+    bank_account_repo: Arc<dyn BankAccountRepository>,
 }
 
 impl ApprovalService {
@@ -38,6 +44,8 @@ impl ApprovalService {
         invoice_repo: Arc<dyn InvoiceRepository>,
         account_repo: Arc<dyn AccountRepository>,
         tax_repo: Arc<dyn TaxRepository>,
+        payment_repo: Arc<dyn PaymentRepository>,
+        bank_account_repo: Arc<dyn BankAccountRepository>,
     ) -> Self {
         Self {
             approval_repo,
@@ -47,6 +55,8 @@ impl ApprovalService {
             invoice_repo,
             account_repo,
             tax_repo,
+            payment_repo,
+            bank_account_repo,
         }
     }
 
@@ -267,6 +277,71 @@ impl ApprovalService {
         };
 
         tracing::info!(invoice_id = %invoice_id, approval_id = %request.id, "Purchase invoice submitted for approval");
+        Ok(self.enrich_response(request).await)
+    }
+
+    /// Submit a payment for approval.
+    #[instrument(skip(self))]
+    pub async fn submit_payment_approval(
+        &self,
+        payment_id: Uuid,
+        requested_by: Uuid,
+    ) -> Result<ApprovalResponse, AppError> {
+        let mut payment = self.payment_repo.find_by_id(payment_id).await?;
+
+        if payment.status != DocumentStatus::Draft && payment.status != DocumentStatus::Rejected {
+            return Err(AppError::Validation {
+                message: "Only draft or rejected payments can be submitted for approval".to_string(),
+            });
+        }
+
+        payment.status = DocumentStatus::WaitingApproval;
+        payment.updated_at = time::OffsetDateTime::now_utc();
+        self.payment_repo.update(&payment).await?;
+
+        let now = time::OffsetDateTime::now_utc();
+        let existing = self.approval_repo.find_by_document(payment_id).await?;
+
+        let doc_type = match payment.payment_type {
+            finance_assistant_domain::entities::payment::PaymentType::PaymentReceived => {
+                ApprovalDocumentType::PaymentReceived
+            }
+            finance_assistant_domain::entities::payment::PaymentType::PaymentPaid => {
+                ApprovalDocumentType::PaymentPaid
+            }
+        };
+
+        let request = match existing {
+            Some(mut req) => {
+                req.status = ApprovalStatus::Pending;
+                req.requested_by = requested_by;
+                req.comment = None;
+                req.reviewed_by = None;
+                req.reviewed_at = None;
+                req.updated_at = now;
+                self.approval_repo.update(&req).await?;
+                req
+            }
+            None => {
+                let req = ApprovalRequest {
+                    id: Uuid::new_v4(),
+                    company_id: payment.company_id,
+                    document_type: doc_type,
+                    document_id: payment_id,
+                    status: ApprovalStatus::Pending,
+                    requested_by,
+                    reviewed_by: None,
+                    reviewed_at: None,
+                    comment: None,
+                    created_at: now,
+                    updated_at: now,
+                };
+                self.approval_repo.save(&req).await?;
+                req
+            }
+        };
+
+        tracing::info!(payment_id = %payment_id, approval_id = %request.id, "Payment submitted for approval");
         Ok(self.enrich_response(request).await)
     }
 
@@ -495,6 +570,154 @@ impl ApprovalService {
                 invoice.updated_at = now;
                 self.invoice_repo.update_purchase(&invoice).await?;
             }
+            ApprovalDocumentType::PaymentReceived => {
+                let mut payment = self.payment_repo.find_by_id(req.document_id).await?;
+                if payment.status != DocumentStatus::WaitingApproval {
+                    return Err(AppError::Validation {
+                        message: "Only waiting approval payments can be approved".to_string(),
+                    });
+                }
+
+                // Resolve Bank Account asset account
+                let bank_account = self.bank_account_repo.find_by_id(payment.bank_account_id).await?;
+
+                // Resolve Accounts Receivable account (code 1200)
+                let ar_code = finance_assistant_domain::value_objects::AccountCode("1200".to_string());
+                let ar_account = self
+                    .account_repo
+                    .find_by_code(payment.company_id, &ar_code)
+                    .await?
+                    .ok_or_else(|| AppError::Validation {
+                        message: "Accounts Receivable account (1200) not found".to_string(),
+                    })?;
+
+                // Generate Journal Entry
+                let journal_id = Uuid::new_v4();
+                let mut journal_lines = Vec::new();
+
+                // Debit Bank Account asset account
+                journal_lines.push(finance_assistant_domain::entities::journal::JournalLine {
+                    id: Uuid::new_v4(),
+                    journal_entry_id: journal_id,
+                    account_id: bank_account.account_id,
+                    debit: payment.amount,
+                    credit: Decimal::ZERO,
+                    description: Some(format!("Payment received via bank account {}", bank_account.account_name)),
+                    sort_order: 0,
+                });
+
+                // Credit Accounts Receivable
+                journal_lines.push(finance_assistant_domain::entities::journal::JournalLine {
+                    id: Uuid::new_v4(),
+                    journal_entry_id: journal_id,
+                    account_id: ar_account.id,
+                    debit: Decimal::ZERO,
+                    credit: payment.amount,
+                    description: Some(format!("Accounts receivable clearance for payment {}", payment.reference_number)),
+                    sort_order: 1,
+                });
+
+                let journal_entry = finance_assistant_domain::entities::journal::JournalEntry {
+                    id: journal_id,
+                    company_id: payment.company_id,
+                    branch_id: None,
+                    reference_number: payment.reference_number.clone(),
+                    description: format!("Auto-posting payment received {}", payment.reference_number),
+                    transaction_date: payment.payment_date,
+                    lines: journal_lines,
+                    status: DocumentStatus::Posted,
+                    source: finance_assistant_domain::entities::journal::JournalSource::PaymentReceived,
+                    source_document_id: Some(payment.id),
+                    created_by: payment.created_by,
+                    posted_by: Some(reviewed_by),
+                    posted_at: Some(now),
+                    created_at: now,
+                    updated_at: now,
+                };
+
+                // Save journal entry to database
+                self.journal_repo.save(&journal_entry).await?;
+
+                // Transition payment status to Posted
+                payment.status = DocumentStatus::Posted;
+                payment.journal_entry_id = Some(journal_id);
+                payment.updated_at = now;
+                self.payment_repo.update(&payment).await?;
+            }
+            ApprovalDocumentType::PaymentPaid => {
+                let mut payment = self.payment_repo.find_by_id(req.document_id).await?;
+                if payment.status != DocumentStatus::WaitingApproval {
+                    return Err(AppError::Validation {
+                        message: "Only waiting approval payments can be approved".to_string(),
+                    });
+                }
+
+                // Resolve Bank Account asset account
+                let bank_account = self.bank_account_repo.find_by_id(payment.bank_account_id).await?;
+
+                // Resolve Accounts Payable account (code 2100)
+                let ap_code = finance_assistant_domain::value_objects::AccountCode("2100".to_string());
+                let ap_account = self
+                    .account_repo
+                    .find_by_code(payment.company_id, &ap_code)
+                    .await?
+                    .ok_or_else(|| AppError::Validation {
+                        message: "Accounts Payable account (2100) not found".to_string(),
+                    })?;
+
+                // Generate Journal Entry
+                let journal_id = Uuid::new_v4();
+                let mut journal_lines = Vec::new();
+
+                // Debit Accounts Payable
+                journal_lines.push(finance_assistant_domain::entities::journal::JournalLine {
+                    id: Uuid::new_v4(),
+                    journal_entry_id: journal_id,
+                    account_id: ap_account.id,
+                    debit: payment.amount,
+                    credit: Decimal::ZERO,
+                    description: Some(format!("Accounts payable clearance for payment {}", payment.reference_number)),
+                    sort_order: 0,
+                });
+
+                // Credit Bank Account asset account
+                journal_lines.push(finance_assistant_domain::entities::journal::JournalLine {
+                    id: Uuid::new_v4(),
+                    journal_entry_id: journal_id,
+                    account_id: bank_account.account_id,
+                    debit: Decimal::ZERO,
+                    credit: payment.amount,
+                    description: Some(format!("Payment paid via bank account {}", bank_account.account_name)),
+                    sort_order: 1,
+                });
+
+                let journal_entry = finance_assistant_domain::entities::journal::JournalEntry {
+                    id: journal_id,
+                    company_id: payment.company_id,
+                    branch_id: None,
+                    reference_number: payment.reference_number.clone(),
+                    description: format!("Auto-posting payment paid {}", payment.reference_number),
+                    transaction_date: payment.payment_date,
+                    lines: journal_lines,
+                    status: DocumentStatus::Posted,
+                    source: finance_assistant_domain::entities::journal::JournalSource::PaymentPaid,
+                    source_document_id: Some(payment.id),
+                    created_by: payment.created_by,
+                    posted_by: Some(reviewed_by),
+                    posted_at: Some(now),
+                    created_at: now,
+                    updated_at: now,
+                };
+
+                // Save journal entry to database
+                self.journal_repo.save(&journal_entry).await?;
+
+                // Transition payment status to Posted
+                payment.status = DocumentStatus::Posted;
+                payment.journal_entry_id = Some(journal_id);
+                payment.updated_at = now;
+                self.payment_repo.update(&payment).await?;
+            }
             _ => {
                 // Other document types will be implemented as tasks progress
             }
@@ -535,6 +758,12 @@ impl ApprovalService {
                 journal.status = DocumentStatus::Rejected;
                 journal.updated_at = now;
                 self.journal_repo.update(&journal).await?;
+            }
+            ApprovalDocumentType::PaymentReceived | ApprovalDocumentType::PaymentPaid => {
+                let mut payment = self.payment_repo.find_by_id(req.document_id).await?;
+                payment.status = DocumentStatus::Rejected;
+                payment.updated_at = now;
+                self.payment_repo.update(&payment).await?;
             }
             ApprovalDocumentType::SalesInvoice => {
                 let mut invoice = self.invoice_repo.find_sales_by_id(req.document_id).await?;
@@ -849,6 +1078,54 @@ mod tests {
         }
     }
 
+    struct MockPaymentRepository;
+
+    #[async_trait::async_trait]
+    impl PaymentRepository for MockPaymentRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<finance_assistant_domain::entities::payment::Payment, AppError> {
+            Err(AppError::NotFound {
+                resource: "Payment".to_string(),
+                id: _id.to_string(),
+            })
+        }
+        async fn find_by_company(&self, _company_id: Uuid, _page: u32, _per_page: u32) -> Result<Vec<finance_assistant_domain::entities::payment::Payment>, AppError> {
+            Ok(vec![])
+        }
+        async fn count_by_company(&self, _company_id: Uuid) -> Result<u64, AppError> {
+            Ok(0)
+        }
+        async fn save(&self, payment: &finance_assistant_domain::entities::payment::Payment) -> Result<finance_assistant_domain::entities::payment::Payment, AppError> {
+            Ok(payment.clone())
+        }
+        async fn update(&self, _payment: &finance_assistant_domain::entities::payment::Payment) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn delete(&self, _id: Uuid) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
+    struct MockBankAccountRepository;
+
+    #[async_trait::async_trait]
+    impl BankAccountRepository for MockBankAccountRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<finance_assistant_domain::entities::bank_account::BankAccount, AppError> {
+            Err(AppError::NotFound {
+                resource: "BankAccount".to_string(),
+                id: _id.to_string(),
+            })
+        }
+        async fn find_all_by_company(&self, _company_id: Uuid) -> Result<Vec<finance_assistant_domain::entities::bank_account::BankAccount>, AppError> {
+            Ok(vec![])
+        }
+        async fn save(&self, _bank_account: &finance_assistant_domain::entities::bank_account::BankAccount) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn update(&self, _bank_account: &finance_assistant_domain::entities::bank_account::BankAccount) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
     struct MockTaxRepository;
 
     #[async_trait::async_trait]
@@ -898,6 +1175,9 @@ mod tests {
         let account_repo = Arc::new(MockAccountRepository);
         let tax_repo = Arc::new(MockTaxRepository);
 
+        let payment_repo = Arc::new(MockPaymentRepository);
+        let bank_account_repo = Arc::new(MockBankAccountRepository);
+
         let service = ApprovalService::new(
             approval_repo.clone(),
             journal_repo.clone(),
@@ -906,6 +1186,8 @@ mod tests {
             invoice_repo.clone(),
             account_repo,
             tax_repo,
+            payment_repo,
+            bank_account_repo,
         );
 
         let company_id = Uuid::new_v4();
@@ -1006,6 +1288,9 @@ mod tests {
         let account_repo = Arc::new(MockAccountRepository);
         let tax_repo = Arc::new(MockTaxRepository);
 
+        let payment_repo = Arc::new(MockPaymentRepository);
+        let bank_account_repo = Arc::new(MockBankAccountRepository);
+
         let service = ApprovalService::new(
             approval_repo.clone(),
             journal_repo.clone(),
@@ -1014,6 +1299,8 @@ mod tests {
             invoice_repo.clone(),
             account_repo,
             tax_repo,
+            payment_repo,
+            bank_account_repo,
         );
 
         let company_id = Uuid::new_v4();
@@ -1057,6 +1344,7 @@ mod tests {
             created_by: user_id,
             created_at: OffsetDateTime::now_utc(),
             updated_at: OffsetDateTime::now_utc(),
+            attachment_url: None,
         };
         *invoice_repo.purchase.lock().unwrap() = Some(draft_invoice);
 

@@ -35,6 +35,7 @@ export interface PurchaseInvoice {
   aiConfidence?: number
   uploadedDocumentId?: string
   notes?: string
+  attachmentUrl?: string
   journalEntryId?: string
   createdBy: string
   createdAt: string
@@ -92,6 +93,7 @@ export interface CreatePurchaseInvoiceRequest {
   dueDate: string
   lines: CreatePurchaseInvoiceLineRequest[]
   notes?: string
+  attachmentUrl?: string
 }
 
 export interface CreateInvoiceLineRequest {

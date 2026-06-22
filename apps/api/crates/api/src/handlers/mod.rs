@@ -6,3 +6,5 @@ pub mod items;
 pub mod journals;
 pub mod master_data;
 pub mod reports;
+pub mod upload;
+pub mod payments;
