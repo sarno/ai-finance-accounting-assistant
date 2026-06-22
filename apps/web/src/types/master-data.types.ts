@@ -264,3 +264,55 @@ export interface UpdateItemRequest {
   isActive: boolean
 }
 
+export type TaxRecordStatus = 'not_required' | 'required' | 'drafted' | 'validated' | 'reported' | 'paid' | 'archived'
+export type TaxPaymentStatus = 'unpaid' | 'paid'
+export type TaxFilingStatus = 'unfiled' | 'filed'
+
+export interface TaxRecord {
+  id: string
+  companyId: string
+  taxTypeId: string
+  sourceDocumentType: string
+  sourceDocumentId: string
+  taxPeriod: string
+  taxBaseAmount: number
+  taxRate: number
+  taxAmount: number
+  status: TaxRecordStatus
+  counterpartyName?: string
+  counterpartyNpwp?: string
+  createdAt: string
+}
+
+export interface TaxSummaryResponse {
+  totalVatOutput: number
+  totalVatInput: number
+  netTaxDue: number
+  records: TaxRecord[]
+}
+
+export interface TaxCalendarEntry {
+  id: string
+  companyId: string
+  taxTypeId: string
+  taxPeriod: string
+  paymentDueDate: string
+  filingDueDate: string
+  paymentStatus: TaxPaymentStatus
+  filingStatus: TaxFilingStatus
+  reminderSentAt?: string
+  createdAt: string
+}
+
+export interface CreateTaxCalendarRequest {
+  companyId: string
+  taxTypeId: string
+  taxPeriod: string
+  paymentDueDate: string
+  filingDueDate: string
+}
+
+export interface UpdateTaxCalendarStatusRequest {
+  paymentStatus?: TaxPaymentStatus
+  filingStatus?: TaxFilingStatus
+}

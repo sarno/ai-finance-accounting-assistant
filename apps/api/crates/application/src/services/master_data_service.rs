@@ -10,7 +10,7 @@ use finance_assistant_domain::{
         company::Company,
         customer::Customer,
         supplier::Supplier,
-        tax::{TaxCategory, TaxType},
+        tax::{TaxCategory, TaxType, TaxCalendarEntry},
     },
     value_objects::{AccountCode, AccountType},
 };
@@ -22,7 +22,8 @@ use crate::{
         account_repository::AccountRepository, bank_account_repository::BankAccountRepository,
         branch_repository::BranchRepository, company_repository::CompanyRepository,
         customer_repository::CustomerRepository, supplier_repository::SupplierRepository,
-        tax_repository::TaxRepository,
+        tax_repository::TaxRepository, tax_repository::TaxRecordRepository,
+        tax_repository::TaxCalendarRepository,
     },
 };
 
@@ -34,6 +35,8 @@ pub struct MasterDataService {
     supplier_repo: Arc<dyn SupplierRepository>,
     bank_account_repo: Arc<dyn BankAccountRepository>,
     tax_repo: Arc<dyn TaxRepository>,
+    tax_record_repo: Arc<dyn TaxRecordRepository>,
+    tax_calendar_repo: Arc<dyn TaxCalendarRepository>,
 }
 
 impl MasterDataService {
@@ -45,6 +48,8 @@ impl MasterDataService {
         supplier_repo: Arc<dyn SupplierRepository>,
         bank_account_repo: Arc<dyn BankAccountRepository>,
         tax_repo: Arc<dyn TaxRepository>,
+        tax_record_repo: Arc<dyn TaxRecordRepository>,
+        tax_calendar_repo: Arc<dyn TaxCalendarRepository>,
     ) -> Self {
         Self {
             company_repo,
@@ -54,6 +59,8 @@ impl MasterDataService {
             supplier_repo,
             bank_account_repo,
             tax_repo,
+            tax_record_repo,
+            tax_calendar_repo,
         }
     }
 
@@ -463,5 +470,112 @@ impl MasterDataService {
     pub async fn list_tax_types(&self, company_id: Uuid) -> Result<Vec<TaxTypeResponse>, AppError> {
         let tax_types = self.tax_repo.find_all_by_company(company_id).await?;
         Ok(tax_types.into_iter().map(TaxTypeResponse::from).collect())
+    }
+
+    pub async fn list_tax_records(
+        &self,
+        company_id: Uuid,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<TaxRecordResponse>, AppError> {
+        let list = self
+            .tax_record_repo
+            .find_all_by_company(company_id, page, per_page)
+            .await?;
+        Ok(list.into_iter().map(TaxRecordResponse::from).collect())
+    }
+
+    pub async fn count_tax_records(&self, company_id: Uuid) -> Result<u64, AppError> {
+        self.tax_record_repo.count_by_company(company_id).await
+    }
+
+    pub async fn get_tax_summary(
+        &self,
+        company_id: Uuid,
+        start_date: time::Date,
+        end_date: time::Date,
+    ) -> Result<TaxSummaryResponse, AppError> {
+        let records = self
+            .tax_record_repo
+            .get_summary(company_id, start_date, end_date)
+            .await?;
+
+        let tax_types = self.tax_repo.find_all_by_company(company_id).await?;
+
+        let mut total_vat_output = rust_decimal::Decimal::ZERO;
+        let mut total_vat_input = rust_decimal::Decimal::ZERO;
+        let mut summary_records = Vec::new();
+
+        for r in records {
+            if let Some(tax_type) = tax_types.iter().find(|t| t.id == r.tax_type_id) {
+                match tax_type.category {
+                    TaxCategory::VatOutput => {
+                        total_vat_output += r.tax_amount;
+                    }
+                    TaxCategory::VatInput => {
+                        total_vat_input += r.tax_amount;
+                    }
+                    _ => {}
+                }
+            }
+            summary_records.push(TaxRecordResponse::from(r));
+        }
+
+        let net_tax_due = total_vat_output - total_vat_input;
+
+        Ok(TaxSummaryResponse {
+            total_vat_output,
+            total_vat_input,
+            net_tax_due,
+            records: summary_records,
+        })
+    }
+
+    pub async fn list_tax_calendar(&self, company_id: Uuid) -> Result<Vec<TaxCalendarResponse>, AppError> {
+        let list = self.tax_calendar_repo.find_all_by_company(company_id).await?;
+        Ok(list.into_iter().map(TaxCalendarResponse::from).collect())
+    }
+
+    pub async fn create_tax_calendar_entry(
+        &self,
+        req: CreateTaxCalendarRequest,
+    ) -> Result<TaxCalendarResponse, AppError> {
+        let now = OffsetDateTime::now_utc();
+        let entry = TaxCalendarEntry {
+            id: Uuid::new_v4(),
+            company_id: req.company_id,
+            tax_type_id: req.tax_type_id,
+            tax_period: req.tax_period,
+            payment_due_date: req.payment_due_date,
+            filing_due_date: req.filing_due_date,
+            payment_status: finance_assistant_domain::entities::tax::TaxPaymentStatus::Unpaid,
+            filing_status: finance_assistant_domain::entities::tax::TaxFilingStatus::Unfiled,
+            reminder_sent_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+
+        self.tax_calendar_repo.save(&entry).await?;
+        Ok(TaxCalendarResponse::from(entry))
+    }
+
+    pub async fn update_tax_calendar_status(
+        &self,
+        id: Uuid,
+        req: UpdateTaxCalendarStatusRequest,
+    ) -> Result<TaxCalendarResponse, AppError> {
+        let mut entry = self.tax_calendar_repo.find_by_id(id).await?;
+
+        if let Some(p_status) = req.payment_status {
+            entry.payment_status = finance_assistant_domain::entities::tax::TaxPaymentStatus::from_str(&p_status);
+        }
+        if let Some(f_status) = req.filing_status {
+            entry.filing_status = finance_assistant_domain::entities::tax::TaxFilingStatus::from_str(&f_status);
+        }
+
+        entry.updated_at = OffsetDateTime::now_utc();
+        self.tax_calendar_repo.update(&entry).await?;
+
+        Ok(TaxCalendarResponse::from(entry))
     }
 }

@@ -1,6 +1,6 @@
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use std::sync::Arc;
@@ -162,6 +162,28 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/companies/:company_id/tax-types",
             get(master_data::list_tax_types),
+        )
+        // Tax Records & Summary
+        .route(
+            "/api/companies/:company_id/tax-records",
+            get(master_data::list_tax_records),
+        )
+        .route(
+            "/api/companies/:company_id/tax-summary",
+            get(master_data::get_tax_summary),
+        )
+        // Tax Calendar
+        .route(
+            "/api/companies/:company_id/tax-calendar",
+            get(master_data::list_tax_calendar),
+        )
+        .route(
+            "/api/tax-calendar",
+            post(master_data::create_tax_calendar_entry),
+        )
+        .route(
+            "/api/tax-calendar/:id/status",
+            put(master_data::update_tax_calendar_status),
         )
         // Branches
         .route("/api/branches", post(master_data::create_branch))

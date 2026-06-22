@@ -7,6 +7,7 @@ use finance_assistant_domain::{
     entities::{
         approval::{ApprovalDocumentType, ApprovalRequest, ApprovalStatus},
         payment::{Payment, PaymentType},
+        tax::{TaxRecord, TaxRecordStatus},
     },
     value_objects::DocumentStatus,
 };
@@ -18,7 +19,9 @@ use crate::{
         account_repository::AccountRepository, approval_repository::ApprovalRepository,
         audit_log_repository::AuditLogRepository, invoice_repository::InvoiceRepository,
         journal_repository::JournalRepository, tax_repository::TaxRepository,
-        user_repository::UserRepository, payment_repository::PaymentRepository,
+        tax_repository::TaxRecordRepository, customer_repository::CustomerRepository,
+        supplier_repository::SupplierRepository, user_repository::UserRepository,
+        payment_repository::PaymentRepository,
         bank_account_repository::BankAccountRepository,
     },
 };
@@ -31,6 +34,9 @@ pub struct ApprovalService {
     invoice_repo: Arc<dyn InvoiceRepository>,
     account_repo: Arc<dyn AccountRepository>,
     tax_repo: Arc<dyn TaxRepository>,
+    tax_record_repo: Arc<dyn TaxRecordRepository>,
+    customer_repo: Arc<dyn CustomerRepository>,
+    supplier_repo: Arc<dyn SupplierRepository>,
     payment_repo: Arc<dyn PaymentRepository>,
     bank_account_repo: Arc<dyn BankAccountRepository>,
 }
@@ -44,6 +50,9 @@ impl ApprovalService {
         invoice_repo: Arc<dyn InvoiceRepository>,
         account_repo: Arc<dyn AccountRepository>,
         tax_repo: Arc<dyn TaxRepository>,
+        tax_record_repo: Arc<dyn TaxRecordRepository>,
+        customer_repo: Arc<dyn CustomerRepository>,
+        supplier_repo: Arc<dyn SupplierRepository>,
         payment_repo: Arc<dyn PaymentRepository>,
         bank_account_repo: Arc<dyn BankAccountRepository>,
     ) -> Self {
@@ -55,6 +64,9 @@ impl ApprovalService {
             invoice_repo,
             account_repo,
             tax_repo,
+            tax_record_repo,
+            customer_repo,
+            supplier_repo,
             payment_repo,
             bank_account_repo,
         }
@@ -396,7 +408,12 @@ impl ApprovalService {
                         message: "Accounts Receivable account (1200) not found".to_string(),
                     })?;
 
-                // 2. Generate Journal Entry
+                // Get customer info for tax record counterparty
+                let customer = self.customer_repo.find_by_id(invoice.customer_id).await.ok();
+                let counterparty_name = customer.as_ref().map(|c| c.name.clone());
+                let counterparty_npwp = customer.as_ref().and_then(|c| c.tax_number.clone());
+
+                // 2. Generate Journal Entry & Tax Records
                 let journal_id = Uuid::new_v4();
                 let mut journal_lines = Vec::new();
                 let mut sort_order = 0;
@@ -420,6 +437,33 @@ impl ApprovalService {
                             message: "Missing tax type configuration for tax amount".to_string(),
                         })?;
                         let tax_config = self.tax_repo.find_by_id(tax_id).await?;
+
+                        // Create and save TaxRecord
+                        let tax_period = time::Date::from_calendar_date(
+                            invoice.invoice_date.year(),
+                            invoice.invoice_date.month(),
+                            1,
+                        )
+                        .unwrap_or(invoice.invoice_date);
+
+                        let tax_record = TaxRecord {
+                            id: Uuid::new_v4(),
+                            company_id: invoice.company_id,
+                            tax_type_id: tax_id,
+                            source_document_type: "sales_invoice".to_string(),
+                            source_document_id: invoice.id,
+                            tax_period,
+                            tax_base_amount: line.net_amount(),
+                            tax_rate: tax_config.default_rate,
+                            tax_amount: line.tax_amount,
+                            status: TaxRecordStatus::Drafted,
+                            counterparty_name: counterparty_name.clone(),
+                            counterparty_npwp: counterparty_npwp.clone(),
+                            created_at: now,
+                            updated_at: now,
+                        };
+                        self.tax_record_repo.save(&tax_record).await?;
+
                         journal_lines.push(
                             finance_assistant_domain::entities::journal::JournalLine {
                                 id: Uuid::new_v4(),
@@ -492,6 +536,12 @@ impl ApprovalService {
                         message: "Accounts Payable account (2100) not found".to_string(),
                     })?;
 
+                // Get supplier info for tax record counterparty
+                let supplier = self.supplier_repo.find_by_id(invoice.supplier_id).await.ok();
+                let counterparty_name = supplier.as_ref().map(|s| s.name.clone());
+                let counterparty_npwp = supplier.as_ref().and_then(|s| s.tax_number.clone());
+
+                // Generate Journal Entry & Tax Records
                 let journal_id = Uuid::new_v4();
                 let mut journal_lines = Vec::new();
                 let mut sort_order = 0;
@@ -513,6 +563,33 @@ impl ApprovalService {
                             message: "Missing tax type configuration for tax amount".to_string(),
                         })?;
                         let tax_config = self.tax_repo.find_by_id(tax_id).await?;
+
+                        // Create and save TaxRecord
+                        let tax_period = time::Date::from_calendar_date(
+                            invoice.invoice_date.year(),
+                            invoice.invoice_date.month(),
+                            1,
+                        )
+                        .unwrap_or(invoice.invoice_date);
+
+                        let tax_record = TaxRecord {
+                            id: Uuid::new_v4(),
+                            company_id: invoice.company_id,
+                            tax_type_id: tax_id,
+                            source_document_type: "purchase_invoice".to_string(),
+                            source_document_id: invoice.id,
+                            tax_period,
+                            tax_base_amount: line.net_amount(),
+                            tax_rate: tax_config.default_rate,
+                            tax_amount: line.tax_amount,
+                            status: TaxRecordStatus::Drafted,
+                            counterparty_name: counterparty_name.clone(),
+                            counterparty_npwp: counterparty_npwp.clone(),
+                            created_at: now,
+                            updated_at: now,
+                        };
+                        self.tax_record_repo.save(&tax_record).await?;
+
                         journal_lines.push(
                             finance_assistant_domain::entities::journal::JournalLine {
                                 id: Uuid::new_v4(),
@@ -816,9 +893,68 @@ mod tests {
     use finance_assistant_domain::entities::tax::{TaxCategory, TaxType};
     use finance_assistant_domain::entities::user::{User, UserRole};
     use finance_assistant_domain::value_objects::{AccountCode, AccountType, DocumentStatus};
+    use crate::ports::customer_repository::CustomerRepository;
+    use crate::ports::supplier_repository::SupplierRepository;
+    use crate::ports::tax_repository::TaxRecordRepository;
     use std::str::FromStr;
     use std::sync::Mutex;
     use time::OffsetDateTime;
+
+    struct MockCustomerRepository;
+    #[async_trait::async_trait]
+    impl CustomerRepository for MockCustomerRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<finance_assistant_domain::entities::customer::Customer, AppError> {
+            Ok(finance_assistant_domain::entities::customer::Customer {
+                id: _id,
+                company_id: Uuid::new_v4(),
+                name: "Mock Customer".to_string(),
+                tax_number: Some("01.234.567.8-999.000".to_string()),
+                email: None,
+                phone: None,
+                address: None,
+                is_active: true,
+                created_at: OffsetDateTime::now_utc(),
+                updated_at: OffsetDateTime::now_utc(),
+            })
+        }
+        async fn find_all_by_company(&self, _company_id: Uuid) -> Result<Vec<finance_assistant_domain::entities::customer::Customer>, AppError> {
+            Ok(vec![])
+        }
+        async fn save(&self, _customer: &finance_assistant_domain::entities::customer::Customer) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn update(&self, _customer: &finance_assistant_domain::entities::customer::Customer) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
+    struct MockSupplierRepository;
+    #[async_trait::async_trait]
+    impl SupplierRepository for MockSupplierRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<finance_assistant_domain::entities::supplier::Supplier, AppError> {
+            Ok(finance_assistant_domain::entities::supplier::Supplier {
+                id: _id,
+                company_id: Uuid::new_v4(),
+                name: "Mock Supplier".to_string(),
+                tax_number: Some("01.234.567.8-999.000".to_string()),
+                email: None,
+                phone: None,
+                address: None,
+                is_active: true,
+                created_at: OffsetDateTime::now_utc(),
+                updated_at: OffsetDateTime::now_utc(),
+            })
+        }
+        async fn find_all_by_company(&self, _company_id: Uuid) -> Result<Vec<finance_assistant_domain::entities::supplier::Supplier>, AppError> {
+            Ok(vec![])
+        }
+        async fn save(&self, _supplier: &finance_assistant_domain::entities::supplier::Supplier) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn update(&self, _supplier: &finance_assistant_domain::entities::supplier::Supplier) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
 
     struct MockApprovalRepository {
         request: Mutex<Option<ApprovalRequest>>,
@@ -1158,6 +1294,31 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
+    impl TaxRecordRepository for MockTaxRepository {
+        async fn find_by_id(&self, id: Uuid) -> Result<TaxRecord, AppError> {
+            Err(AppError::NotFound {
+                resource: "TaxRecord".to_string(),
+                id: id.to_string(),
+            })
+        }
+        async fn find_all_by_company(&self, _company_id: Uuid, _page: u32, _per_page: u32) -> Result<Vec<TaxRecord>, AppError> {
+            Ok(vec![])
+        }
+        async fn count_by_company(&self, _company_id: Uuid) -> Result<u64, AppError> {
+            Ok(0)
+        }
+        async fn save(&self, _tax_record: &TaxRecord) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn update(&self, _tax_record: &TaxRecord) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn get_summary(&self, _company_id: Uuid, _start_date: time::Date, _end_date: time::Date) -> Result<Vec<TaxRecord>, AppError> {
+            Ok(vec![])
+        }
+    }
+
     #[tokio::test]
     async fn test_submit_and_approve_sales_invoice() {
         let approval_repo = Arc::new(MockApprovalRepository {
@@ -1174,6 +1335,8 @@ mod tests {
         });
         let account_repo = Arc::new(MockAccountRepository);
         let tax_repo = Arc::new(MockTaxRepository);
+        let customer_repo = Arc::new(MockCustomerRepository);
+        let supplier_repo = Arc::new(MockSupplierRepository);
 
         let payment_repo = Arc::new(MockPaymentRepository);
         let bank_account_repo = Arc::new(MockBankAccountRepository);
@@ -1185,7 +1348,10 @@ mod tests {
             user_repo,
             invoice_repo.clone(),
             account_repo,
-            tax_repo,
+            tax_repo.clone(),
+            tax_repo.clone(),
+            customer_repo,
+            supplier_repo,
             payment_repo,
             bank_account_repo,
         );
@@ -1287,6 +1453,8 @@ mod tests {
         });
         let account_repo = Arc::new(MockAccountRepository);
         let tax_repo = Arc::new(MockTaxRepository);
+        let customer_repo = Arc::new(MockCustomerRepository);
+        let supplier_repo = Arc::new(MockSupplierRepository);
 
         let payment_repo = Arc::new(MockPaymentRepository);
         let bank_account_repo = Arc::new(MockBankAccountRepository);
@@ -1298,7 +1466,10 @@ mod tests {
             user_repo,
             invoice_repo.clone(),
             account_repo,
-            tax_repo,
+            tax_repo.clone(),
+            tax_repo.clone(),
+            customer_repo,
+            supplier_repo,
             payment_repo,
             bank_account_repo,
         );

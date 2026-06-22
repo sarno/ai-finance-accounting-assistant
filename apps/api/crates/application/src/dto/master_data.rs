@@ -405,3 +405,107 @@ impl From<Branch> for BranchResponse {
         }
     }
 }
+
+use finance_assistant_domain::entities::tax::TaxRecord;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaxRecordResponse {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub tax_type_id: Uuid,
+    pub source_document_type: String,
+    pub source_document_id: Uuid,
+    pub tax_period: String,
+    pub tax_base_amount: Decimal,
+    pub tax_rate: Decimal,
+    pub tax_amount: Decimal,
+    pub status: String,
+    pub counterparty_name: Option<String>,
+    pub counterparty_npwp: Option<String>,
+    #[serde(with = "crate::dto::datetime_format")]
+    pub created_at: time::OffsetDateTime,
+}
+
+impl From<TaxRecord> for TaxRecordResponse {
+    fn from(r: TaxRecord) -> Self {
+        Self {
+            id: r.id,
+            company_id: r.company_id,
+            tax_type_id: r.tax_type_id,
+            source_document_type: r.source_document_type,
+            source_document_id: r.source_document_id,
+            tax_period: r.tax_period.to_string(),
+            tax_base_amount: r.tax_base_amount,
+            tax_rate: r.tax_rate,
+            tax_amount: r.tax_amount,
+            status: r.status.as_str().to_string(),
+            counterparty_name: r.counterparty_name,
+            counterparty_npwp: r.counterparty_npwp,
+            created_at: r.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaxSummaryResponse {
+    pub total_vat_output: Decimal,
+    pub total_vat_input: Decimal,
+    pub net_tax_due: Decimal,
+    pub records: Vec<TaxRecordResponse>,
+}
+
+use finance_assistant_domain::entities::tax::TaxCalendarEntry;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaxCalendarResponse {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub tax_type_id: Uuid,
+    pub tax_period: String,
+    pub payment_due_date: String,
+    pub filing_due_date: String,
+    pub payment_status: String,
+    pub filing_status: String,
+    pub reminder_sent_at: Option<time::OffsetDateTime>,
+    #[serde(with = "crate::dto::datetime_format")]
+    pub created_at: time::OffsetDateTime,
+}
+
+impl From<TaxCalendarEntry> for TaxCalendarResponse {
+    fn from(e: TaxCalendarEntry) -> Self {
+        Self {
+            id: e.id,
+            company_id: e.company_id,
+            tax_type_id: e.tax_type_id,
+            tax_period: e.tax_period.to_string(),
+            payment_due_date: e.payment_due_date.to_string(),
+            filing_due_date: e.filing_due_date.to_string(),
+            payment_status: e.payment_status.as_str().to_string(),
+            filing_status: e.filing_status.as_str().to_string(),
+            reminder_sent_at: e.reminder_sent_at,
+            created_at: e.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTaxCalendarRequest {
+    pub company_id: Uuid,
+    pub tax_type_id: Uuid,
+    pub tax_period: time::Date,
+    pub payment_due_date: time::Date,
+    pub filing_due_date: time::Date,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateTaxCalendarStatusRequest {
+    pub payment_status: Option<String>,
+    pub filing_status: Option<String>,
+}
+
+

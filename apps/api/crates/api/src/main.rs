@@ -79,9 +79,11 @@ async fn main() -> anyhow::Result<()> {
         company_repo,
         branch_repo,
         account_repo.clone(),
-        customer_repo,
+        customer_repo.clone(),
         supplier_repo.clone(),
         bank_account_repo.clone(),
+        tax_repo.clone(),
+        tax_repo.clone(),
         tax_repo.clone(),
     ));
     let invoice_svc = Arc::new(InvoiceService::new(
@@ -103,6 +105,9 @@ async fn main() -> anyhow::Result<()> {
         invoice_repo.clone(),
         account_repo.clone(),
         tax_repo.clone(),
+        tax_repo.clone(), // PgTaxRepository implements both TaxRepository and TaxRecordRepository
+        customer_repo,
+        supplier_repo.clone(),
         payment_repo,
         bank_account_repo,
     ));

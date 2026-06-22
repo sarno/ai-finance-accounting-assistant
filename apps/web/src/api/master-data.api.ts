@@ -8,7 +8,8 @@ import type {
   TaxType, CreateTaxTypeRequest, UpdateTaxTypeRequest,
   Branch, CreateBranchRequest, UpdateBranchRequest,
   ItemCategory, CreateItemCategoryRequest, UpdateItemCategoryRequest,
-  Item, CreateItemRequest, UpdateItemRequest
+  Item, CreateItemRequest, UpdateItemRequest,
+  TaxRecord, TaxSummaryResponse, TaxCalendarEntry, CreateTaxCalendarRequest, UpdateTaxCalendarStatusRequest
 } from '@/types/master-data.types'
 
 export const companyApi = {
@@ -187,4 +188,35 @@ export const itemApi = {
     await client.delete(`/items/${id}`)
   }
 }
+
+export const taxRecordApi = {
+  listByCompany: async (companyId: string, page?: number, perPage?: number): Promise<{ records: TaxRecord[], totalCount: number }> => {
+    const params = { page, perPage }
+    const response = await client.get<TaxRecord[]>(`/companies/${companyId}/tax-records`, { params })
+    const totalCount = parseInt(response.headers['x-total-count'] || '0', 10)
+    return { records: response.data, totalCount }
+  },
+  getSummary: async (companyId: string, startDate: string, endDate: string): Promise<TaxSummaryResponse> => {
+    const { data } = await client.get<TaxSummaryResponse>(`/companies/${companyId}/tax-summary`, {
+      params: { startDate, endDate }
+    })
+    return data
+  }
+}
+
+export const taxCalendarApi = {
+  listByCompany: async (companyId: string): Promise<TaxCalendarEntry[]> => {
+    const { data } = await client.get<TaxCalendarEntry[]>(`/companies/${companyId}/tax-calendar`)
+    return data
+  },
+  create: async (req: CreateTaxCalendarRequest): Promise<TaxCalendarEntry> => {
+    const { data } = await client.post<TaxCalendarEntry>('/tax-calendar', req)
+    return data
+  },
+  updateStatus: async (id: string, req: UpdateTaxCalendarStatusRequest): Promise<TaxCalendarEntry> => {
+    const { data } = await client.put<TaxCalendarEntry>(`/tax-calendar/${id}/status`, req)
+    return data
+  }
+}
+
 
