@@ -1,0 +1,25 @@
+name: approval-command
+description: "Process approval or rejection command for a pending transaction"
+trigger:
+  - type: message
+    pattern: "(?i)(setujui|approve|tolak|reject|batal|approval)"
+steps:
+  - name: parse_approval_command
+    type: extract
+    description: "Extract companyId, documentReference (e.g. INV-2026-001), action (Approve or Reject), and comment (rejection reason or approval notes)."
+  - name: verify_document_reference
+    type: condition
+    description: "Ensure that documentReference is clearly specified. If not, ask the user to clarify which document needs to be approved/rejected."
+  - name: invoke_submit_approval
+    type: tool_call
+    tool: submit_approval_command
+    arguments:
+      companyId: "${companyId}"
+      documentReference: "${documentReference}"
+      action: "${action}"
+      comment: "${comment}"
+  - name: format_approval_result
+    type: llm_generate
+    prompt: |
+      Sajikan konfirmasi status approval yang telah diproses.
+      Sebutkan referensi dokumen, tindakan yang diambil (disetujui/ditolak), dan catatan pendukung jika ada.

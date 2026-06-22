@@ -1,0 +1,161 @@
+[
+  {
+    "name": "query_report",
+    "description": "Retrieve financial reports (CashPosition, AccountsReceivable, AccountsPayable, ProfitLoss, TaxSummary, TrialBalance, GeneralLedger) from the Axum API backend.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "companyId": {
+          "type": "string",
+          "description": "UUID of the target company."
+        },
+        "intent": {
+          "type": "string",
+          "enum": ["CashPosition", "AccountsReceivable", "AccountsPayable", "ProfitLoss", "TaxSummary", "TrialBalance", "GeneralLedger"],
+          "description": "The specific report type to calculate."
+        },
+        "period": {
+          "type": "string",
+          "description": "Target calendar period in YYYY-MM format (for date-range reports)."
+        },
+        "asOf": {
+          "type": "string",
+          "description": "As of date in YYYY-MM-DD format (for single-date snapshots like Cash/Aging)."
+        },
+        "startDate": {
+          "type": "string",
+          "description": "Custom starting date in YYYY-MM-DD format."
+        },
+        "endDate": {
+          "type": "string",
+          "description": "Custom ending date in YYYY-MM-DD format."
+        }
+      },
+      "required": ["companyId", "intent"]
+    }
+  },
+  {
+    "name": "create_draft_invoice",
+    "description": "Create a new suggested draft sales or purchase invoice in the database.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "companyId": {
+          "type": "string",
+          "description": "UUID of the company."
+        },
+        "invoiceType": {
+          "type": "string",
+          "enum": ["Sales", "Purchase"],
+          "description": "Specifies whether it is a customer sale or supplier purchase."
+        },
+        "contactId": {
+          "type": "string",
+          "description": "UUID of the customer (Sales) or supplier (Purchase)."
+        },
+        "invoiceDate": {
+          "type": "string",
+          "description": "Issue date in YYYY-MM-DD format."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Due date in YYYY-MM-DD format."
+        },
+        "invoiceNumber": {
+          "type": "string",
+          "description": "Sales invoice reference or Supplier invoice number."
+        },
+        "notes": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "itemId": { "type": "string", "description": "Optional UUID of the item." },
+              "description": { "type": "string" },
+              "quantity": { "type": "number" },
+              "unitPrice": { "type": "number" },
+              "taxTypeId": { "type": "string", "description": "UUID of active tax type config (e.g. PPN)." },
+              "accountId": { "type": "string", "description": "UUID of the accounting ledger code (COA)." }
+            },
+            "required": ["description", "quantity", "unitPrice", "accountId"]
+          }
+        }
+      },
+      "required": ["companyId", "invoiceType", "contactId", "invoiceDate", "dueDate", "invoiceNumber", "items"]
+    }
+  },
+  {
+    "name": "create_draft_payment",
+    "description": "Create a new suggested draft payment (received or paid) with option allocations.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "paymentType": { "type": "string", "enum": ["payment_received", "payment_paid"] },
+        "counterpartyType": { "type": "string", "enum": ["customer", "supplier"] },
+        "counterpartyId": { "type": "string" },
+        "paymentDate": { "type": "string", "description": "YYYY-MM-DD" },
+        "bankAccountId": { "type": "string" },
+        "amount": { "type": "number" },
+        "notes": { "type": "string" },
+        "allocations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "documentType": { "type": "string", "enum": ["sales_invoice", "purchase_invoice"] },
+              "documentId": { "type": "string" },
+              "allocatedAmount": { "type": "number" }
+            },
+            "required": ["documentType", "documentId", "allocatedAmount"]
+          }
+        }
+      },
+      "required": ["companyId", "paymentType", "counterpartyType", "counterpartyId", "paymentDate", "bankAccountId", "amount"]
+    }
+  },
+  {
+    "name": "create_draft_journal",
+    "description": "Create a suggesting manual balanced journal entry suggestion.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "description": { "type": "string" },
+        "transactionDate": { "type": "string", "description": "YYYY-MM-DD" },
+        "referenceNumber": { "type": "string" },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "accountId": { "type": "string" },
+              "debit": { "type": "number" },
+              "credit": { "type": "number" },
+              "description": { "type": "string" }
+            },
+            "required": ["accountId", "debit", "credit"]
+          }
+        }
+      },
+      "required": ["companyId", "description", "transactionDate", "lines"]
+    }
+  },
+  {
+    "name": "submit_approval_command",
+    "description": "Process an Approve or Reject command for a pending approval request via document reference text.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "documentReference": { "type": "string", "description": "Document number text (e.g. INV-2026-001)." },
+        "action": { "type": "string", "enum": ["Approve", "Reject"] },
+        "comment": { "type": "string", "description": "Optional comment or rejection reason." }
+      },
+      "required": ["companyId", "documentReference", "action"]
+    }
+  }
+]

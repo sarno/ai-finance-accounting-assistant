@@ -1,0 +1,35 @@
+name: invoice-draft
+description: "Create draft sales or purchase invoice from user prompt or OCR data"
+trigger:
+  - type: message
+    pattern: "(?i)(buat|catat|tulis|rekam|invoice|tagihan|faktur)"
+steps:
+  - name: parse_invoice_data
+    type: extract
+    description: "Extract companyId, invoiceType (Sales or Purchase), contactId (customer/supplier UUID), invoiceDate (YYYY-MM-DD), dueDate (YYYY-MM-DD), invoiceNumber, notes, and items (description, quantity, unitPrice, taxTypeId, accountId)."
+  - name: check_missing_fields
+    type: condition
+    description: "If any required fields (invoiceType, contactId, invoiceDate, dueDate, invoiceNumber, or items) are missing, prompt the user for short clarification."
+  - name: invoke_create_invoice
+    type: tool_call
+    tool: create_draft_invoice
+    arguments:
+      companyId: "${companyId}"
+      invoiceType: "${invoiceType}"
+      contactId: "${contactId}"
+      invoiceDate: "${invoiceDate}"
+      dueDate: "${dueDate}"
+      invoiceNumber: "${invoiceNumber}"
+      notes: "${notes}"
+      items: "${items}"
+  - name: format_invoice_result
+    type: llm_generate
+    prompt: |
+      Sajikan ringkasan draft invoice yang berhasil dibuat.
+      Format respons:
+      - Jenis Invoice (Sales/Purchase)
+      - Kontak/Mitra
+      - Tanggal & Jatuh Tempo
+      - Nomor Invoice/Referensi
+      - Rincian item dan Total Nilai (termasuk pajak)
+      Berikan catatan bahwa status dokumen adalah DRAFT (belum diposting) dan langkah berikutnya adalah melakukan review/approval melalui chat atau dashboard.

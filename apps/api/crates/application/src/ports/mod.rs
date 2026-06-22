@@ -3,6 +3,8 @@
 
 pub mod account_repository;
 pub mod ai_client_port;
+pub mod document_repository;
+
 pub mod approval_repository;
 pub mod audit_log_repository;
 pub mod bank_account_repository;

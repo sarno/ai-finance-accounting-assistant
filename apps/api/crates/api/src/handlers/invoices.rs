@@ -9,8 +9,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{errors::ApiError, middleware::auth_middleware::AuthenticatedUser, state::AppState};
+use finance_assistant_app::errors::AppError;
 use finance_assistant_app::dto::invoice::{
-    CreatePurchaseInvoiceRequest, CreateSalesInvoiceRequest, PurchaseInvoiceResponse,
+    CreatePurchaseInvoiceRequest, CreatePurchaseInvoiceLineRequest, CreateSalesInvoiceRequest, PurchaseInvoiceResponse,
     SalesInvoiceResponse,
 };
 
@@ -195,3 +196,95 @@ pub async fn submit_purchase_approval(
     let response = state.invoice_service.get_purchase_invoice(id).await?;
     Ok(Json(response))
 }
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePurchaseFromDocumentRequest {
+    pub uploaded_document_id: Uuid,
+    pub supplier_id: Uuid,
+    pub extracted_fields: ExtractedFields,
+    pub lines: Vec<InvoiceLineRequest>,
+    pub ai_confidence: f64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtractedFields {
+    pub invoice_no: String,
+    pub invoice_date: String,
+    pub due_date: String,
+    pub subtotal: rust_decimal::Decimal,
+    pub tax_amount: rust_decimal::Decimal,
+    pub total_amount: rust_decimal::Decimal,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceLineRequest {
+    pub description: String,
+    pub quantity: rust_decimal::Decimal,
+    pub unit_price: rust_decimal::Decimal,
+    pub expense_account_id: Uuid,
+    pub tax_type_id: Option<Uuid>,
+}
+
+fn parse_date(date_str: &str) -> Result<time::Date, ApiError> {
+    time::Date::parse(date_str, &time::format_description::well_known::Rfc3339)
+        .or_else(|_| time::Date::parse(date_str, &time::macros::format_description!("[year]-[month]-[day]")))
+        .map_err(|e| ApiError(AppError::Validation {
+            message: format!("Invalid date format '{}': {}", date_str, e),
+        }))
+}
+
+/// POST /api/purchase-invoices/from-document
+pub async fn create_purchase_from_document(
+    State(state): State<Arc<AppState>>,
+    AuthenticatedUser(user): AuthenticatedUser,
+    Json(req): Json<CreatePurchaseFromDocumentRequest>,
+) -> Result<Json<PurchaseInvoiceResponse>, ApiError> {
+    let invoice_date = parse_date(&req.extracted_fields.invoice_date)?;
+    let due_date = parse_date(&req.extracted_fields.due_date)?;
+
+    let doc = state.document_service.get_document(req.uploaded_document_id).await.ok();
+    let attachment_url = doc.map(|d| {
+        format!(
+            "{}/{}",
+            state.config.storage_base_url.trim_end_matches('/'),
+            d.storage_path
+        )
+    });
+
+    let invoice_req = CreatePurchaseInvoiceRequest {
+        company_id: user.company_id,
+        branch_id: None,
+        supplier_invoice_number: req.extracted_fields.invoice_no.clone(),
+        internal_reference: req.extracted_fields.invoice_no,
+        supplier_id: req.supplier_id,
+        invoice_date,
+        due_date,
+        lines: req.lines.into_iter().enumerate().map(|(idx, l)| {
+            CreatePurchaseInvoiceLineRequest {
+                item_id: None,
+                description: l.description,
+                quantity: l.quantity,
+                unit_price: l.unit_price,
+                discount_amount: None,
+                tax_type_id: l.tax_type_id,
+                account_id: l.expense_account_id,
+                sort_order: (idx + 1) as i32,
+            }
+        }).collect(),
+        notes: Some(format!("Dibuat dari unggahan dokumen (Confidence: {}%)", req.ai_confidence)),
+        attachment_url,
+        uploaded_document_id: Some(req.uploaded_document_id),
+        ai_confidence: Some(rust_decimal::Decimal::from_f64_retain(req.ai_confidence).unwrap_or_default()),
+    };
+
+    let response = state
+        .invoice_service
+        .create_purchase_draft(invoice_req, user.id)
+        .await?;
+
+    Ok(Json(response))
+}
+

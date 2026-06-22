@@ -15,6 +15,7 @@ use finance_assistant_app::services::{
     approval_service::ApprovalService, auth_service::AuthService, invoice_service::InvoiceService,
     item_service::ItemService, journal_service::JournalService,
     master_data_service::MasterDataService, payment_service::PaymentService,
+    report_service::ReportService, document_service::DocumentService,
 };
 use finance_assistant_infra::{
     db,
@@ -26,9 +27,12 @@ use finance_assistant_infra::{
         invoice_repository::PgInvoiceRepository, item_repository::PgItemRepository,
         journal_repository::PgJournalRepository, supplier_repository::PgSupplierRepository,
         tax_repository::PgTaxRepository, user_repository::PgUserRepository,
-        payment_repository::PgPaymentRepository,
+        payment_repository::PgPaymentRepository, document_repository::PgDocumentRepository,
     },
+    storage::local_storage::LocalStorageProvider,
+    ai_client::openai_client::OpenAiClient,
 };
+
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -112,6 +116,23 @@ async fn main() -> anyhow::Result<()> {
         bank_account_repo,
     ));
 
+    let report_svc = Arc::new(ReportService::new(pool.clone()));
+
+    let document_repo = Arc::new(PgDocumentRepository::new(pool.clone()));
+    let storage_port = Arc::new(LocalStorageProvider::new(
+        cfg.storage_base_path.clone(),
+        cfg.storage_base_url.clone(),
+    ));
+    let openai_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+    let ai_client = Arc::new(OpenAiClient::new(openai_key));
+    let document_svc = Arc::new(DocumentService::new(
+        document_repo,
+        storage_port,
+        ai_client,
+        invoice_repo.clone(),
+        pool.clone(),
+    ));
+
     let app_state = state::AppState {
         config: cfg.clone(),
         db_pool: pool,
@@ -122,7 +143,10 @@ async fn main() -> anyhow::Result<()> {
         invoice_service: invoice_svc,
         item_service: item_svc,
         payment_service: payment_svc,
+        report_service: report_svc,
+        document_service: document_svc,
     };
+
 
     // ─── Build Axum router ────────────────────────────────────────────────────
     let app = router::build(app_state);
@@ -136,3 +160,7 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+
+
+

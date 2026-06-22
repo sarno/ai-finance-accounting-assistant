@@ -14,7 +14,7 @@ use tower_http::{
 };
 
 use crate::{
-    handlers::{approvals, auth, health, invoices, items, journals, master_data, reports, upload, payments},
+    handlers::{approvals, auth, health, invoices, items, journals, master_data, reports, upload, payments, ai},
     middleware::auth_middleware,
     state::AppState,
 };
@@ -34,8 +34,10 @@ pub fn build(state: AppState) -> Router {
 
     // ─── Protected routes (JWT required) ─────────────────────────────────────
     let protected_routes = Router::new()
-        // Upload
+        // Upload & Documents
         .route("/api/upload", post(upload::upload_file))
+        .route("/api/documents", get(upload::list_documents))
+        .route("/api/documents/:id", get(upload::get_document))
         // Approvals
         .route("/api/approvals", get(approvals::list_pending_approvals))
         .route("/api/approvals/:id", get(approvals::get_approval))
@@ -79,6 +81,10 @@ pub fn build(state: AppState) -> Router {
             post(invoices::create_purchase_draft),
         )
         .route(
+            "/api/purchase-invoices/from-document",
+            post(invoices::create_purchase_from_document),
+        )
+        .route(
             "/api/purchase-invoices/:id",
             get(invoices::get_purchase_invoice)
                 .put(invoices::update_purchase_invoice)
@@ -104,6 +110,11 @@ pub fn build(state: AppState) -> Router {
         // Reports
         .route("/api/reports/cash-position", get(reports::cash_position))
         .route("/api/reports/profit-loss", get(reports::profit_loss))
+        .route("/api/reports/accounts-receivable", get(reports::accounts_receivable))
+        .route("/api/reports/accounts-payable", get(reports::accounts_payable))
+        .route("/api/reports/trial-balance", get(reports::trial_balance))
+        .route("/api/reports/general-ledger", get(reports::general_ledger))
+        .route("/api/reports/tax-summary", get(reports::tax_summary))
         // Companies
         .route(
             "/api/companies",
@@ -221,9 +232,18 @@ pub fn build(state: AppState) -> Router {
             auth_middleware::require_auth,
         ));
 
+    // ─── AI & OpenClaw routes (Bearer AI_SERVICE_TOKEN required) ──────────────
+    let ai_routes = Router::new()
+        .route("/api/ai/tools/query-report", post(ai::query_report))
+        .route("/api/ai/tools/create-draft-invoice", post(ai::create_draft_invoice))
+        .route("/api/ai/tools/create-draft-payment", post(ai::create_draft_payment))
+        .route("/api/ai/tools/create-draft-journal", post(ai::create_draft_journal))
+        .route("/api/ai/tools/submit-approval-command", post(ai::submit_approval_command));
+
     // ─── Global middleware stack ──────────────────────────────────────────────
     public_routes
         .merge(protected_routes)
+        .merge(ai_routes)
         .with_state(shared_state)
         .layer(
             tower::ServiceBuilder::new()

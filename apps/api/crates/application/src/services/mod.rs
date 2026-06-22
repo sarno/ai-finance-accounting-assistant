@@ -3,7 +3,9 @@
 //! Each service takes repository/port traits as dependencies via constructor injection.
 
 pub mod ai_orchestration_service;
+pub mod document_service;
 pub mod approval_service;
+
 pub mod audit_service;
 pub mod auth_service;
 pub mod invoice_service;

@@ -12,3 +12,5 @@ pub mod payment;
 pub mod supplier;
 pub mod tax;
 pub mod user;
+pub mod uploaded_document;
+

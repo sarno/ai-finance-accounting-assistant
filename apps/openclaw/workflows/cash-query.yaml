@@ -1,0 +1,28 @@
+name: cash-query
+description: "Workflow for querying cash position or other financial reports"
+trigger:
+  - type: message
+    pattern: "(?i)(cash|kas|saldo|rekening|financial|laporan|rugi laba|profit loss|ar aging|ap aging|aging)"
+steps:
+  - name: parse_request
+    type: extract
+    description: "Extract companyId, intent (enum: CashPosition, AccountsReceivable, AccountsPayable, ProfitLoss, TaxSummary, TrialBalance, GeneralLedger), period (YYYY-MM), asOf (YYYY-MM-DD), startDate, or endDate from user prompt."
+  - name: invoke_backend
+    type: tool_call
+    tool: query_report
+    arguments:
+      companyId: "${companyId}"
+      intent: "${intent}"
+      period: "${period}"
+      asOf: "${asOf}"
+      startDate: "${startDate}"
+      endDate: "${endDate}"
+  - name: format_result
+    type: llm_generate
+    prompt: |
+      Sajikan data laporan keuangan yang diterima dari backend.
+      Patuhi aturan berikut:
+      1. Gunakan Bahasa Indonesia yang sopan dan jelas.
+      2. Jangan memanipulasi atau mengarang angka.
+      3. Rincikan nilai per akun atau kategori jika tersedia.
+      4. Di bagian akhir, berikan catatan apakah data didasarkan pada transaksi posted (Posted Transactions only) atau mencakup draft.

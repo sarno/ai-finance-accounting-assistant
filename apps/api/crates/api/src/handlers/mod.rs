@@ -8,3 +8,5 @@ pub mod master_data;
 pub mod reports;
 pub mod upload;
 pub mod payments;
+pub mod ai;
+

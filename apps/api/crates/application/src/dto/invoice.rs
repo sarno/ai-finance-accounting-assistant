@@ -49,7 +49,10 @@ pub struct CreatePurchaseInvoiceRequest {
     pub lines: Vec<CreatePurchaseInvoiceLineRequest>,
     pub notes: Option<String>,
     pub attachment_url: Option<String>,
+    pub uploaded_document_id: Option<Uuid>,
+    pub ai_confidence: Option<Decimal>,
 }
+
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

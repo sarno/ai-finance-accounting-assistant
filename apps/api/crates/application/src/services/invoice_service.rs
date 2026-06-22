@@ -384,8 +384,8 @@ impl InvoiceService {
             tax_amount,
             total_amount,
             status: DocumentStatus::Draft,
-            ai_confidence: None,
-            uploaded_document_id: None,
+            ai_confidence: req.ai_confidence,
+            uploaded_document_id: req.uploaded_document_id,
             journal_entry_id: None,
             notes: req.notes,
             attachment_url: req.attachment_url,
@@ -1003,6 +1003,8 @@ mod tests {
                 sort_order: 1,
             }],
             attachment_url: None,
+            uploaded_document_id: None,
+            ai_confidence: None,
         };
 
         let result = service
