@@ -57,7 +57,12 @@ export const useAuthStore = defineStore('auth', () => {
   const currentUser     = computed(() => user.value)
   const userRoles       = computed(() => user.value?.roles ?? [])
 
-  const hasRole = (role: string) => userRoles.value.includes(role)
+  const hasRole = (role: string) =>
+    userRoles.value.some(r => {
+      const normalizedApiRole = r.toLowerCase().replace(/_/g, '')
+      const normalizedCheckRole = role.toLowerCase().replace(/_/g, '')
+      return normalizedApiRole === normalizedCheckRole
+    })
   const canApprove = computed(() =>
     hasRole('Owner') || hasRole('FinanceManager') || hasRole('Admin')
   )
@@ -78,6 +83,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try {
       await authApi.logout()
+    } catch (e) {
+      console.warn('Backend logout call failed:', e)
     } finally {
       accessToken.value  = null
       refreshToken.value = null

@@ -40,3 +40,23 @@ pub struct RefreshTokenResponse {
     pub access_token: String,
     pub refresh_token: String,
 }
+
+// ─── User Management ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateUserRequest {
+    pub email: String,
+    pub full_name: String,
+    pub password: String,
+    pub roles: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUserRequest {
+    pub full_name: String,
+    pub roles: Vec<String>,
+    pub is_active: bool,
+}
+

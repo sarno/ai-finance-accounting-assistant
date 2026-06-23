@@ -10,7 +10,7 @@
     <!-- Tab switcher -->
     <div class="tabs">
       <button 
-        v-for="tab in tabItems" 
+        v-for="tab in visibleTabItems" 
         :key="tab.id"
         :class="['tab-btn', { active: activeTab === tab.id }]"
         @click="activeTab = tab.id"
@@ -36,7 +36,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">Tax Identification Number (NPWP)</label>
-          <input v-model="companyForm.taxNumber" type="text" class="form-input" />
+          <input :value="canViewSensitive ? companyForm.taxNumber : maskTaxNumber(companyForm.taxNumber)" @input="updateCompanyTaxNumber" type="text" class="form-input" :disabled="!canViewSensitive" />
         </div>
         <div class="form-group">
           <label class="form-label">Base Currency</label>
@@ -121,7 +121,7 @@
           <tbody>
             <tr v-for="cust in customers" :key="cust.id">
               <td style="font-weight: 600;">{{ cust.name }}</td>
-              <td>{{ cust.taxNumber || '-' }}</td>
+              <td>{{ maskTaxNumber(cust.taxNumber) }}</td>
               <td>{{ cust.email || '-' }}</td>
               <td>{{ cust.phone || '-' }}</td>
               <td>
@@ -163,7 +163,7 @@
           <tbody>
             <tr v-for="sup in suppliers" :key="sup.id">
               <td style="font-weight: 600;">{{ sup.name }}</td>
-              <td>{{ sup.taxNumber || '-' }}</td>
+              <td>{{ maskTaxNumber(sup.taxNumber) }}</td>
               <td>{{ sup.email || '-' }}</td>
               <td>{{ sup.phone || '-' }}</td>
               <td>
@@ -471,7 +471,7 @@
             </div>
             <div class="form-group">
               <label class="form-label">Tax ID (NPWP)</label>
-              <input v-model="customerForm.taxNumber" type="text" class="form-input" />
+              <input :value="canViewSensitive ? customerForm.taxNumber : maskTaxNumber(customerForm.taxNumber)" @input="updateCustomerTaxNumber" type="text" class="form-input" :disabled="!canViewSensitive" />
             </div>
             <div class="form-group">
               <label class="form-label">Email</label>
@@ -514,7 +514,7 @@
             </div>
             <div class="form-group">
               <label class="form-label">Tax ID (NPWP)</label>
-              <input v-model="supplierForm.taxNumber" type="text" class="form-input" />
+              <input :value="canViewSensitive ? supplierForm.taxNumber : maskTaxNumber(supplierForm.taxNumber)" @input="updateSupplierTaxNumber" type="text" class="form-input" :disabled="!canViewSensitive" />
             </div>
             <div class="form-group">
               <label class="form-label">Email</label>
@@ -790,11 +790,103 @@
         </form>
       </div>
     </div>
+
+    <!-- User & Role Management Tab -->
+    <div v-if="activeTab === 'users'" class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2>User Accounts & Role Permissions</h2>
+        <button @click="addUser" class="btn btn-primary">➕ Add User</button>
+      </div>
+      
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Full Name</th>
+              <th>Email</th>
+              <th>Roles</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="usr in usersList" :key="usr.id">
+              <td style="font-weight: 600;">{{ usr.fullName }}</td>
+              <td>{{ usr.email }}</td>
+              <td>
+                <span v-for="role in usr.roles" :key="role" class="badge" style="margin-right: 4px; background-color: var(--primary-bg); color: var(--primary); font-size: 0.7rem; text-transform: capitalize; font-weight: 500;">
+                  {{ role.replace('_', ' ') }}
+                </span>
+              </td>
+              <td>
+                <span :class="['badge', usr.isActive !== false ? 'badge-success' : 'badge-danger']">
+                  {{ usr.isActive !== false ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td>
+                <button @click="editUser(usr)" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem; margin-right: 8px;">Edit</button>
+                <button @click="confirmDeleteUser(usr)" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem; border-color: var(--danger); background-color: var(--danger-bg); color: var(--danger);">Delete</button>
+              </td>
+            </tr>
+            <tr v-if="usersList.length === 0">
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No user accounts configured.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- User Modal -->
+    <div v-if="modals.user" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>{{ editingId ? 'Edit User Profile' : 'New User Account' }}</h2>
+          <button @click="modals.user = false" class="modal-close">&times;</button>
+        </div>
+        <form @submit.prevent="submitUser">
+          <div class="modal-body">
+            <div class="form-group" style="grid-column: span 2;">
+              <label class="form-label">Full Name</label>
+              <input v-model="userForm.fullName" type="text" class="form-input" required />
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+              <label class="form-label">Email Address</label>
+              <input v-model="userForm.email" type="email" class="form-input" required :disabled="!!editingId" />
+            </div>
+            <div v-if="!editingId" class="form-group" style="grid-column: span 2;">
+              <label class="form-label">Password</label>
+              <input v-model="userForm.password" type="password" class="form-input" required />
+            </div>
+            
+            <div class="form-group" style="grid-column: span 2;">
+              <label class="form-label" style="margin-bottom: 8px; font-weight: 600;">Assigned Roles & Permissions</label>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background-color: var(--card-bg);">
+                <label v-for="r in availableRoles" :key="r.value" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
+                  <input type="checkbox" :value="r.value" v-model="userForm.roles" />
+                  <span>{{ r.label }}</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="editingId" class="form-group" style="grid-column: span 2; margin-top: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;">
+                <input v-model="userForm.isActive" type="checkbox" />
+                <span>Active / Enabled Account</span>
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" @click="modals.user = false" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save User</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </MainLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted, computed } from 'vue'
 import MainLayout from '@/components/MainLayout.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatIDR } from '@/utils/format'
@@ -813,8 +905,34 @@ import type {
   Company, Account, Customer, Supplier, BankAccount, TaxType, Branch,
   ItemCategory, Item
 } from '@/types/master-data.types'
+import { usersApi } from '@/api/users.api'
+import type { User } from '@/types/auth.types'
 
 const auth = useAuthStore()
+
+const canViewSensitive = computed(() => {
+  return auth.hasRole('Owner') ||
+         auth.hasRole('Admin') ||
+         auth.hasRole('FinanceManager') ||
+         auth.hasRole('Auditor')
+})
+
+const maskTaxNumber = (val?: string) => {
+  if (!val) return '-'
+  if (canViewSensitive.value) return val
+  if (val.length <= 4) return '***'
+  return val.slice(0, 2) + '*'.repeat(val.length - 4) + val.slice(-2)
+}
+
+const updateCompanyTaxNumber = (e: Event) => {
+  companyForm.taxNumber = (e.target as HTMLInputElement).value
+}
+const updateCustomerTaxNumber = (e: Event) => {
+  customerForm.taxNumber = (e.target as HTMLInputElement).value
+}
+const updateSupplierTaxNumber = (e: Event) => {
+  supplierForm.taxNumber = (e.target as HTMLInputElement).value
+}
 
 // State
 const activeTab = ref('company')
@@ -835,6 +953,14 @@ const tabItems = [
   { id: 'items', label: '🏷️ Items' }
 ]
 
+const visibleTabItems = computed(() => {
+  const list = [...tabItems]
+  if (auth.hasRole('Owner') || auth.hasRole('Admin')) {
+    list.push({ id: 'users', label: '👤 User Management' })
+  }
+  return list
+})
+
 // Data lists
 const companies = ref<Company[]>([])
 const branches = ref<Branch[]>([])
@@ -845,6 +971,7 @@ const bankAccounts = ref<BankAccount[]>([])
 const taxTypes = ref<TaxType[]>([])
 const itemCategories = ref<ItemCategory[]>([])
 const items = ref<Item[]>([])
+const usersList = ref<User[]>([])
 
 // Active company ID
 const activeCompanyId = ref<string>('')
@@ -929,6 +1056,23 @@ const itemForm = reactive({
   isActive: true
 })
 
+const userForm = reactive({
+  fullName: '',
+  email: '',
+  password: '',
+  roles: [] as string[],
+  isActive: true
+})
+
+const availableRoles = [
+  { value: 'owner', label: '👑 Owner / Workspace Owner' },
+  { value: 'admin', label: '🛡️ Admin / System Administrator' },
+  { value: 'finance_manager', label: '💼 Finance Manager' },
+  { value: 'accounting_staff', label: '📓 Accounting Staff' },
+  { value: 'tax_staff', label: '⚖️ Tax Specialist' },
+  { value: 'auditor', label: '🔍 Internal Auditor' }
+]
+
 // Modals Visibility State
 const modals = reactive({
   account: false,
@@ -938,7 +1082,8 @@ const modals = reactive({
   tax: false,
   branch: false,
   itemCategory: false,
-  item: false
+  item: false,
+  user: false
 })
 
 // Lifecycle
@@ -1003,6 +1148,8 @@ async function loadTabSpecificData() {
       taxTypes.value = await taxTypeApi.listByCompany(activeCompanyId.value)
       itemCategories.value = await itemCategoryApi.listByCompany(activeCompanyId.value)
       items.value = await itemApi.listByCompany(activeCompanyId.value)
+    } else if (activeTab.value === 'users') {
+      await fetchUsers()
     }
   } catch (err: any) {
     errorMsg.value = `Failed to load data for tab: ${activeTab.value}`
@@ -1526,6 +1673,80 @@ async function submitItem() {
     await loadTabSpecificData()
   } catch (err: any) {
     errorMsg.value = err.response?.data?.message || 'Failed to save item'
+  }
+}
+
+// User Management Actions
+const fetchUsers = async () => {
+  try {
+    errorMsg.value = null
+    usersList.value = await usersApi.list()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Failed to fetch users list'
+  }
+}
+
+const addUser = () => {
+  editingId.value = null
+  userForm.fullName = ''
+  userForm.email = ''
+  userForm.password = ''
+  userForm.roles = []
+  userForm.isActive = true
+  modals.user = true
+}
+
+const editUser = (usr: User) => {
+  editingId.value = usr.id
+  userForm.fullName = usr.fullName
+  userForm.email = usr.email
+  userForm.password = ''
+  userForm.roles = [...usr.roles]
+  userForm.isActive = usr.isActive !== false
+  modals.user = true
+}
+
+const confirmDeleteUser = async (usr: User) => {
+  if (usr.id === auth.currentUser?.id) {
+    errorMsg.value = 'Cannot delete your own user account'
+    return
+  }
+  if (!confirm(`Are you sure you want to delete user ${usr.fullName}?`)) return
+  try {
+    errorMsg.value = null
+    successMsg.value = null
+    await usersApi.delete(usr.id)
+    successMsg.value = 'User account deleted successfully'
+    await fetchUsers()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Failed to delete user'
+  }
+}
+
+const submitUser = async () => {
+  try {
+    errorMsg.value = null
+    successMsg.value = null
+    if (editingId.value) {
+      await usersApi.update(editingId.value, {
+        fullName: userForm.fullName,
+        roles: userForm.roles,
+        isActive: userForm.isActive
+      })
+      successMsg.value = 'User profile and permissions updated successfully'
+    } else {
+      await usersApi.create({
+        email: userForm.email,
+        fullName: userForm.fullName,
+        password: userForm.password,
+        roles: userForm.roles
+      })
+      successMsg.value = 'New user account created successfully'
+    }
+    modals.user = false
+    await fetchUsers()
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || 'Failed to save user'
   }
 }
 </script>

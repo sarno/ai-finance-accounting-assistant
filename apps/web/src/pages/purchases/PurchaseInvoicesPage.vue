@@ -5,7 +5,12 @@
         <h1>Purchase Invoices</h1>
         <p class="page-title-desc">Create and manage supplier bills with tax calculation and approval flow.</p>
       </div>
-      <button class="btn btn-primary" @click="openCreateModal">+ Create Purchase Invoice</button>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <router-link to="/purchases/invoice-automation" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none;">
+          <span>🤖</span> AI Invoice Automation
+        </router-link>
+        <button class="btn btn-primary" @click="openCreateModal">+ Create Purchase Invoice</button>
+      </div>
     </div>
 
     <div v-if="successMsg" class="alert alert-success">{{ successMsg }}</div>

@@ -9,4 +9,6 @@ pub mod reports;
 pub mod upload;
 pub mod payments;
 pub mod ai;
+pub mod users;
+
 

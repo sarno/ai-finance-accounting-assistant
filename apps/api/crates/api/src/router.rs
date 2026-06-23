@@ -14,8 +14,8 @@ use tower_http::{
 };
 
 use crate::{
-    handlers::{approvals, auth, health, invoices, items, journals, master_data, reports, upload, payments, ai},
-    middleware::auth_middleware,
+    handlers::{approvals, auth, health, invoices, items, journals, master_data, reports, upload, payments, ai, users},
+    middleware::{auth_middleware, rate_limit, idempotency, audit},
     state::AppState,
 };
 
@@ -30,6 +30,7 @@ pub fn build(state: AppState) -> Router {
         .route("/health/db", get(health::db_health))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/refresh", post(auth::refresh_token))
+        .route("/api/auth/logout", post(auth::logout))
         .nest_service("/uploads", ServeDir::new(storage_base_path));
 
     // ─── Protected routes (JWT required) ─────────────────────────────────────
@@ -227,6 +228,23 @@ pub fn build(state: AppState) -> Router {
                 .delete(items::delete_item),
         )
         .route("/api/companies/:company_id/items", get(items::list_items))
+        // User & Role Management
+        .route(
+            "/api/users",
+            get(users::list_users).post(users::create_user),
+        )
+        .route(
+            "/api/users/:id",
+            put(users::update_user).delete(users::delete_user),
+        )
+        .layer(middleware::from_fn_with_state(
+            shared_state.clone(),
+            audit::audit_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            shared_state.clone(),
+            idempotency::idempotency_middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             shared_state.clone(),
             auth_middleware::require_auth,
@@ -250,6 +268,7 @@ pub fn build(state: AppState) -> Router {
                 .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
                 .layer(TraceLayer::new_for_http())
                 .layer(TimeoutLayer::new(Duration::from_secs(30)))
+                .layer(middleware::from_fn(rate_limit::rate_limit_middleware))
                 .layer(
                     CorsLayer::new()
                         .allow_origin(Any)

@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     dto::auth::{
         LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse, UserSummary,
+        CreateUserRequest, UpdateUserRequest,
     },
     errors::AppError,
     ports::user_repository::UserRepository,
@@ -176,6 +177,111 @@ impl AuthService {
             &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
         )
         .map_err(|e| AppError::Internal(e.into()))
+    }
+
+    pub async fn list_users(&self, company_id: Uuid) -> Result<Vec<UserSummary>, AppError> {
+        let users = self.user_repo.find_by_company(company_id).await?;
+        let summaries = users
+            .into_iter()
+            .map(|u| UserSummary {
+                id: u.id,
+                company_id: u.company_id,
+                email: u.email,
+                full_name: u.full_name,
+                roles: u.roles.iter().map(|r| r.to_string()).collect(),
+            })
+            .collect();
+        Ok(summaries)
+    }
+
+    pub async fn create_user(&self, creator_company_id: Uuid, req: CreateUserRequest) -> Result<UserSummary, AppError> {
+        if let Some(_) = self.user_repo.find_by_email(&req.email).await? {
+            return Err(AppError::Validation {
+                message: format!("User with email '{}' already exists", req.email),
+            });
+        }
+
+        let password_hash = Self::hash_password(&req.password)?;
+
+        let mut roles = Vec::new();
+        for r in req.roles {
+            if let Ok(role) = std::str::FromStr::from_str(&r) {
+                roles.push(role);
+            }
+        }
+
+        let new_user = User {
+            id: Uuid::new_v4(),
+            company_id: creator_company_id,
+            email: req.email,
+            full_name: req.full_name,
+            password_hash,
+            roles,
+            is_active: true,
+            last_login_at: None,
+            created_at: time::OffsetDateTime::now_utc(),
+            updated_at: time::OffsetDateTime::now_utc(),
+        };
+
+        self.user_repo.save(&new_user).await?;
+
+        Ok(UserSummary {
+            id: new_user.id,
+            company_id: new_user.company_id,
+            email: new_user.email,
+            full_name: new_user.full_name,
+            roles: new_user.roles.iter().map(|r| r.to_string()).collect(),
+        })
+    }
+
+    pub async fn update_user(
+        &self,
+        company_id: Uuid,
+        user_id: Uuid,
+        req: UpdateUserRequest,
+    ) -> Result<UserSummary, AppError> {
+        let mut user = self.user_repo.find_by_id(user_id).await?;
+
+        if user.company_id != company_id {
+            return Err(AppError::Unauthorized {
+                reason: "Cannot manage users in other companies".to_string(),
+            });
+        }
+
+        let mut roles = Vec::new();
+        for r in req.roles {
+            if let Ok(role) = std::str::FromStr::from_str(&r) {
+                roles.push(role);
+            }
+        }
+
+        user.full_name = req.full_name;
+        user.roles = roles;
+        user.is_active = req.is_active;
+        user.updated_at = time::OffsetDateTime::now_utc();
+
+        self.user_repo.update(&user).await?;
+
+        Ok(UserSummary {
+            id: user.id,
+            company_id: user.company_id,
+            email: user.email,
+            full_name: user.full_name,
+            roles: user.roles.iter().map(|r| r.to_string()).collect(),
+        })
+    }
+
+    pub async fn delete_user(&self, company_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
+        let user = self.user_repo.find_by_id(user_id).await?;
+
+        if user.company_id != company_id {
+            return Err(AppError::Unauthorized {
+                reason: "Cannot manage users in other companies".to_string(),
+            });
+        }
+
+        self.user_repo.delete(user_id).await?;
+        Ok(())
     }
 }
 

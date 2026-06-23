@@ -237,4 +237,74 @@ impl UserRepository for PgUserRepository {
             .map_err(|e| AppError::Internal(e.into()))?;
         Ok(())
     }
+
+    async fn find_by_company(&self, company_id: Uuid) -> Result<Vec<User>, AppError> {
+        let user_rows = sqlx::query(
+            r#"
+            SELECT id, company_id, email, full_name, password_hash, is_active, last_login_at, created_at, updated_at
+            FROM users
+            WHERE company_id = $1
+            "#,
+        )
+        .bind(company_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?;
+
+        let mut users = Vec::new();
+        for user_row in user_rows {
+            let id: Uuid = user_row.get("id");
+            let role_rows = sqlx::query(
+                r#"
+                SELECT role
+                FROM user_roles
+                WHERE user_id = $1
+                "#,
+            )
+            .bind(id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
+
+            let roles: Vec<UserRole> = role_rows
+                .into_iter()
+                .map(|r| {
+                    let role_str: String = r.get("role");
+                    UserRole::from_str(&role_str).unwrap_or(UserRole::AccountingStaff)
+                })
+                .collect();
+
+            users.push(User {
+                id,
+                company_id: user_row.get("company_id"),
+                email: user_row.get("email"),
+                full_name: user_row.get("full_name"),
+                password_hash: user_row.get("password_hash"),
+                roles,
+                is_active: user_row.get("is_active"),
+                last_login_at: user_row
+                    .get::<Option<time::OffsetDateTime>, _>("last_login_at")
+                    .map(|t| t.into()),
+                created_at: user_row.get::<time::OffsetDateTime, _>("created_at").into(),
+                updated_at: user_row.get::<time::OffsetDateTime, _>("updated_at").into(),
+            });
+        }
+
+        Ok(users)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), AppError> {
+        sqlx::query(
+            r#"
+            DELETE FROM users
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?;
+
+        Ok(())
+    }
 }

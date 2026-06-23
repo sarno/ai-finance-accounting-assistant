@@ -11,6 +11,7 @@ export interface User {
   email: string
   fullName: string
   roles: string[]
+  isActive?: boolean
 }
 
 export interface LoginResponse {
@@ -23,3 +24,17 @@ export interface RefreshResponse {
   accessToken: string
   refreshToken: string
 }
+
+export interface CreateUserRequest {
+  email: string
+  fullName: string
+  password?: string
+  roles: string[]
+}
+
+export interface UpdateUserRequest {
+  fullName: string
+  roles: string[]
+  isActive: boolean
+}
+

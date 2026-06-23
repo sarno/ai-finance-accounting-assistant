@@ -93,4 +93,26 @@ export const invoiceApi = {
     })
     return data.url
   },
+
+  uploadDocumentForOcr: async (file: File): Promise<any> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('documentType', 'purchase_invoice')
+    const { data } = await client.post<any>('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return data
+  },
+
+  getDocument: async (id: string): Promise<any> => {
+    const { data } = await client.get<any>(`/documents/${id}`)
+    return data
+  },
+
+  createPurchaseFromDocument: async (req: any): Promise<PurchaseInvoice> => {
+    const { data } = await client.post<PurchaseInvoice>('/purchase-invoices/from-document', req)
+    return data
+  },
 }

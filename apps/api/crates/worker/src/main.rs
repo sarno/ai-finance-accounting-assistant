@@ -22,8 +22,9 @@ async fn main() -> anyhow::Result<()> {
     let overdue_alerts = tokio::spawn(jobs::overdue_alerts::run(pool.clone()));
     let tax_reminders = tokio::spawn(jobs::tax_reminders::run(pool.clone()));
     let report_scheduler = tokio::spawn(jobs::report_scheduler::run(pool.clone()));
+    let backup_job = tokio::spawn(jobs::backup_job::run(pool.clone()));
 
-    tokio::try_join!(overdue_alerts, tax_reminders, report_scheduler)?;
+    tokio::try_join!(overdue_alerts, tax_reminders, report_scheduler, backup_job)?;
 
     Ok(())
 }

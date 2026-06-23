@@ -8,6 +8,7 @@ const DashboardPage       = () => import('@/pages/dashboard/DashboardPage.vue')
 const JournalsPage        = () => import('@/pages/journals/JournalsPage.vue')
 const SalesInvoicesPage   = () => import('@/pages/sales/SalesInvoicesPage.vue')
 const PurchaseInvoicesPage = () => import('@/pages/purchases/PurchaseInvoicesPage.vue')
+const InvoiceAutomationPage = () => import('@/pages/purchases/InvoiceAutomationPage.vue')
 const PaymentsPage        = () => import('@/pages/payments/PaymentsPage.vue')
 const ApprovalsPage       = () => import('@/pages/approvals/ApprovalsPage.vue')
 const TaxPage             = () => import('@/pages/tax/TaxPage.vue')
@@ -50,6 +51,12 @@ const routes: RouteRecordRaw[] = [
     path: '/purchases',
     name: 'purchases',
     component: PurchaseInvoicesPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/purchases/invoice-automation',
+    name: 'invoice-automation',
+    component: InvoiceAutomationPage,
     meta: { requiresAuth: true },
   },
   {

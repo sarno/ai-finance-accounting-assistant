@@ -26,8 +26,8 @@ services:
 
   api:
     build:
-      context: ../apps/api
-      dockerfile: Dockerfile   # multi-stage Rust build
+      context: ..
+      dockerfile: apps/api/Dockerfile
     container_name: finance_api
     env_file: ../.env
     depends_on:
@@ -41,8 +41,9 @@ services:
 
   worker:
     build:
-      context: ../apps/api
-      dockerfile: Worker.Dockerfile
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    entrypoint: ["./worker"]
     container_name: finance_worker
     env_file: ../.env
     depends_on:

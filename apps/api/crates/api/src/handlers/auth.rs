@@ -26,3 +26,9 @@ pub async fn refresh_token(
     let response = state.auth_service.refresh(req).await?;
     Ok(Json(response))
 }
+
+/// POST /api/auth/logout
+/// Log out user (stateless token clearance).
+pub async fn logout() -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(serde_json::json!({ "success": true })))
+}
